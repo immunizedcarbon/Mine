@@ -1,12 +1,14 @@
 """Integration with the Gemini 2.5 Pro API via the official SDK."""
 from __future__ import annotations
 
-from typing import Optional
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 import logging
 import math
 
-from google import genai
-from google.genai import types
+if TYPE_CHECKING:  # pragma: no cover - optional dependency for type checkers only
+    from google import genai  # noqa: F401 - imported for typing
+    from google.genai import types  # noqa: F401 - imported for typing
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,12 +18,12 @@ _PROMPT_TEMPLATE = (
     "Argumente, Beschlüsse und Forderungen. Rede:\n\n{speech}"
 )
 
-_TEXTUAL_SAFETY_CATEGORIES = (
-    types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-    types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-    types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-    types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-    types.HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+_TEXTUAL_SAFETY_CATEGORY_NAMES: Sequence[str] = (
+    "HARM_CATEGORY_HATE_SPEECH",
+    "HARM_CATEGORY_DANGEROUS_CONTENT",
+    "HARM_CATEGORY_HARASSMENT",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    "HARM_CATEGORY_CIVIC_INTEGRITY",
 )
 
 
@@ -46,14 +48,19 @@ class GeminiSummarizer:
         self._timeout = timeout
         self._max_retries = max(1, max_retries)
         self._enable_safety_settings = enable_safety_settings
+        self._genai = import_module("google.genai")
+        self._types = import_module("google.genai.types")
+        http_options = self._build_http_options()
+        self._client = self._genai.Client(api_key=self._api_key, http_options=http_options)
+
+    def _build_http_options(self):
         http_options_kwargs: dict[str, object] = {}
         if self._base_url:
             http_options_kwargs["base_url"] = self._base_url
         timeout_seconds = math.ceil(self._timeout)
         if timeout_seconds > 0:
             http_options_kwargs["timeout"] = timeout_seconds
-        http_options = types.HttpOptions(**http_options_kwargs)
-        self._client = genai.Client(api_key=self._api_key, http_options=http_options)
+        return self._types.HttpOptions(**http_options_kwargs)
 
     def summarize(self, speech_text: str) -> str:
         """Generate a Gemini powered summary for ``speech_text``."""
@@ -69,7 +76,7 @@ class GeminiSummarizer:
                     config=config,
                 )
                 return self._extract_text(response)
-            except genai.errors.APIError as exc:  # pragma: no cover - network errors are rare in tests
+            except self._genai.errors.APIError as exc:  # pragma: no cover - network errors are rare in tests
                 last_exc = exc
                 LOGGER.warning(
                     "Gemini request failed (attempt %s/%s): %s",
@@ -79,25 +86,29 @@ class GeminiSummarizer:
                 )
         raise RuntimeError("Failed to generate summary via Gemini") from last_exc
 
-    def _build_generation_config(self) -> types.GenerateContentConfig:
-        config = types.GenerateContentConfig(
+    def _build_generation_config(self):
+        config = self._types.GenerateContentConfig(
             temperature=0.2,
             top_k=32,
             top_p=0.95,
             max_output_tokens=512,
         )
         if not self._enable_safety_settings:
+            categories = self._resolve_safety_categories()
             config.safety_settings = [
-                types.SafetySetting(
+                self._types.SafetySetting(
                     category=category,
-                    threshold=types.HarmBlockThreshold.BLOCK_NONE,
+                    threshold=self._types.HarmBlockThreshold.BLOCK_NONE,
                 )
-                for category in _TEXTUAL_SAFETY_CATEGORIES
+                for category in categories
             ]
         return config
 
-    @staticmethod
-    def _extract_text(response: types.GenerateContentResponse) -> str:
+    def _resolve_safety_categories(self):
+        harm_category = self._types.HarmCategory
+        return tuple(getattr(harm_category, name) for name in _TEXTUAL_SAFETY_CATEGORY_NAMES)
+
+    def _extract_text(self, response: Any) -> str:
         text = (response.text or "").strip()
         if text:
             return text

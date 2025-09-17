@@ -1,8 +1,9 @@
 """HTTP client for the Bundestag Data Service (DIP) API."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, Optional
 import logging
 
 import httpx
@@ -38,20 +39,23 @@ class DIPClient:
     def iter_protocols(self, *, updated_since: Optional[str] = None) -> Iterator[ProtocolMetadata]:
         """Iterate over protocol metadata entries."""
 
-        page = 0
+        cursor: Optional[str] = None
         while True:
-            params: Dict[str, str] = {"offset": str(page * self._page_size), "limit": str(self._page_size)}
+            params: Dict[str, str] = {}
             if updated_since:
                 params["f.aktualisiertStart"] = updated_since
+            if cursor:
+                params["cursor"] = cursor
             response_json = self._request("GET", "/plenarprotokoll", params=params)
             documents = response_json.get("documents") or response_json.get("dokuments") or []
             if not documents:
                 break
             for entry in documents:
                 yield self._parse_protocol_metadata(entry)
-            if len(documents) < self._page_size:
+            next_cursor = response_json.get("cursor")
+            if not next_cursor or str(next_cursor) == cursor:
                 break
-            page += 1
+            cursor = str(next_cursor)
 
     def fetch_protocol_text(self, identifier: str) -> ProtocolDocument:
         """Download a plenary protocol including the full text."""
@@ -71,7 +75,7 @@ class DIPClient:
             headers["Authorization"] = f"ApiKey {self._api_key}"
         return headers
 
-    def _request(self, method: str, path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, any]:
+    def _request(self, method: str, path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         url = f"{self._base_url}{path}"
         last_exc: Optional[Exception] = None
         for attempt in range(1, self._max_retries + 1):
@@ -88,7 +92,7 @@ class DIPClient:
         raise DIPClientError(f"Failed to request {url}") from last_exc
 
     @staticmethod
-    def _parse_protocol_metadata(data: Dict[str, any]) -> ProtocolMetadata:
+    def _parse_protocol_metadata(data: Dict[str, Any]) -> ProtocolMetadata:
         raw_identifier = data.get("id") or data.get("vorgangId") or data.get("dipId") or data.get("plenarprotokollId")
         if not raw_identifier:
             raise DIPClientError("Protocol metadata did not contain an identifier")

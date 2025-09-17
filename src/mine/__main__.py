@@ -1,4 +1,4 @@
-"""Entry point for ``python -m bundestag_mine_refactor``."""
+"""Entry point for ``python -m mine``."""
 from __future__ import annotations
 
 from .cli import main

@@ -1,15 +1,15 @@
 # Architekturüberblick
 
-Dieses Dokument fasst die wichtigsten Bausteine, Abläufe und Datenstrukturen der modernisierten Bundestag-Mine-Pipeline zusammen.
+Dieses Dokument fasst die wichtigsten Bausteine, Abläufe und Datenstrukturen der modernisierten Mine-Pipeline zusammen.
 
 ## Komponentenlandschaft
 
-Die Anwendung ist als installierbares Python-Paket aufgebaut. Jeder Unterordner in `src/bundestag_mine_refactor` erfüllt eine klar abgegrenzte Aufgabe:
+Die Anwendung ist als installierbares Python-Paket aufgebaut. Jeder Unterordner in `src/mine` erfüllt eine klar abgegrenzte Aufgabe:
 
 | Modul                   | Verantwortung |
 |-------------------------|---------------|
 | `clients`               | HTTP-Clients (aktuell nur `DIPClient`) für das Laden von Metadaten und Volltexten über die DIP-API.
-| `config`                | Dataclasses für Konfigurationswerte sowie `load_config`, das Defaults, JSON-Dateien und `BMR_*`-Umgebungsvariablen zusammenführt.
+| `config`                | Dataclasses für Konfigurationswerte sowie `load_config`, das Defaults, JSON-Dateien und `MINE_*`-Umgebungsvariablen zusammenführt.
 | `core`                  | Typisierte Domänenobjekte (`ProtocolMetadata`, `ProtocolDocument`, `Speech`).
 | `database`              | SQLAlchemy-Modelle (`Protocol`, `SpeechModel`) und eine `Storage`-Fassade inklusive Schema-Erzeugung.
 | `parsing`               | Funktionen zum Zerlegen von Protokolltexten in einzelne Reden und Metadaten-Erkennung.
@@ -18,7 +18,7 @@ Die Anwendung ist als installierbares Python-Paket aufgebaut. Jeder Unterordner 
 | `ui`                    | NiceGUI-basierte Kontrolloberfläche samt Laufzeitüberwachung.
 | `runtime`               | Helfer zum Kombinieren der Komponenten zu lauffähigen Pipelines (`create_pipeline`).
 
-Der Einstieg für `python -m bundestag_mine_refactor` delegiert an das CLI (`cli.main`), welches wiederum auf `runtime.create_pipeline` und `ui.run_ui` zurückgreift.
+Der Einstieg für `python -m mine` delegiert an das CLI (`cli.main`), welches wiederum auf `runtime.create_pipeline` und `ui.run_ui` zurückgreift.
 
 ## Ablauf des Imports
 
@@ -45,8 +45,8 @@ Die lokale SQLite-Datenbank (oder eine alternative SQLAlchemy-Zieldatenbank) bes
 ## Konfigurationsquellen
 
 - **Defaultwerte:** in `config.settings` definiert (z. B. DIP-Basis-URL, SQLite-Datenbank).
-- **JSON-Dateien:** `bundestag_mine_refactor.json` im Projekt oder `~/.config/bundestag_mine_refactor/config.json` für nutzerspezifische Einstellungen.
-- **Umgebungsvariablen:** Präfix `BMR_` und Schema `BMR_SECTION_FIELD`. Werte werden typkonvertiert (z. B. `true` → `bool`).
+- **JSON-Dateien:** `mine.json` im Projekt oder `~/.config/mine/config.json` für nutzerspezifische Einstellungen.
+- **Umgebungsvariablen:** Präfix `MINE_` und Schema `MINE_SECTION_FIELD`. Werte werden typkonvertiert (z. B. `true` → `bool`).
 - **CLI-Parameter:** `--config` erlaubt das Laden einer expliziten Konfigurationsdatei.
 
 Die Quellen werden in der obigen Reihenfolge zusammengeführt; spätere Quellen überschreiben frühere.

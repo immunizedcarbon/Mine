@@ -1,4 +1,4 @@
-# Bundestag Mine Refactor
+# Mine
 
 Eine modernisierte Python-Pipeline zum Abrufen, Analysieren und Archivieren von Plenarprotokollen des Deutschen Bundestags. Die Anwendung kombiniert einen zuverlässigen ETL-Prozess, eine NiceGUI-basierte Oberfläche sowie optionale Textzusammenfassungen über Googles Gemini-API.
 
@@ -36,7 +36,7 @@ Eine modernisierte Python-Pipeline zum Abrufen, Analysieren und Archivieren von 
 ├── pyproject.toml           # Paket-Metadaten & optionale Dev-Abhängigkeiten
 ├── requirements.txt         # Minimale Laufzeitabhängigkeiten
 ├── src/
-│   └── bundestag_mine_refactor/
+│   └── mine/
 │       ├── __main__.py      # Einstiegspunkt für `python -m`
 │       ├── cli.py           # Kommandozeileninterface
 │       ├── clients/         # HTTP-Clients (DIP)
@@ -109,14 +109,14 @@ Nach Updates des Quellcodes genügt innerhalb der aktivierten virtuellen Umgebun
 
 ## Konfiguration
 
-`load_config` kombiniert Standardwerte, optionale JSON-Dateien und Umgebungsvariablen mit dem Präfix `BMR_`. Ohne eigene Einstellungen wird eine lokale SQLite-Datenbank (`bundestag_mine.db`) verwendet.
+`load_config` kombiniert Standardwerte, optionale JSON-Dateien und Umgebungsvariablen mit dem Präfix `MINE_`. Ohne eigene Einstellungen wird eine lokale SQLite-Datenbank (`mine.db`) verwendet.
 
 ### Konfigurationsdatei anlegen
 
 Die Anwendung sucht automatisch nach folgenden Dateien (in dieser Reihenfolge):
 
-1. `./bundestag_mine_refactor.json`
-2. `~/.config/bundestag_mine_refactor/config.json`
+1. `./mine.json`
+2. `~/.config/mine/config.json`
 
 Beispielinhalt:
 
@@ -131,7 +131,7 @@ Beispielinhalt:
     "model": "gemini-2.5-pro"
   },
   "storage": {
-    "database_url": "sqlite:///bundestag_mine.db"
+    "database_url": "sqlite:///mine.db"
   }
 }
 ```
@@ -140,14 +140,14 @@ Beispielinhalt:
 
 | Variable                        | Bedeutung                                                        |
 |---------------------------------|------------------------------------------------------------------|
-| `BMR_DIP_API_KEY`               | API-Key für das DIP-Portal                                       |
-| `BMR_DIP_BASE_URL`              | Alternative Basis-URL des DIP-Endpunkts                          |
-| `BMR_DIP_TIMEOUT` / `BMR_DIP_MAX_RETRIES` | HTTP-Timeout (Sekunden) bzw. Retry-Anzahl                |
-| `BMR_DIP_PAGE_SIZE`             | Seitengröße für die Protokollabfrage                             |
-| `BMR_GEMINI_API_KEY`            | API-Key für Gemini-Zusammenfassungen                             |
-| `BMR_GEMINI_ENABLE_SAFETY_SETTINGS` | `true` aktiviert die Gemini-Safety-Filter                     |
-| `BMR_STORAGE_DATABASE_URL`      | Vollständige SQLAlchemy-URL (z. B. `postgresql+psycopg://…`)     |
-| `BMR_STORAGE_ECHO_SQL`          | `true`/`false` für SQL-Debug-Ausgaben                            |
+| `MINE_DIP_API_KEY`               | API-Key für das DIP-Portal                                       |
+| `MINE_DIP_BASE_URL`              | Alternative Basis-URL des DIP-Endpunkts                          |
+| `MINE_DIP_TIMEOUT` / `MINE_DIP_MAX_RETRIES` | HTTP-Timeout (Sekunden) bzw. Retry-Anzahl                |
+| `MINE_DIP_PAGE_SIZE`             | Seitengröße für die Protokollabfrage                             |
+| `MINE_GEMINI_API_KEY`            | API-Key für Gemini-Zusammenfassungen                             |
+| `MINE_GEMINI_ENABLE_SAFETY_SETTINGS` | `true` aktiviert die Gemini-Safety-Filter                     |
+| `MINE_STORAGE_DATABASE_URL`      | Vollständige SQLAlchemy-URL (z. B. `postgresql+psycopg://…`)     |
+| `MINE_STORAGE_ECHO_SQL`          | `true`/`false` für SQL-Debug-Ausgaben                            |
 
 Umgebungsvariablen überschreiben Werte aus der Datei. Mit `--config /pfad/zur/datei.json` lässt sich beim CLI-Aufruf eine spezifische Datei laden.
 
@@ -155,10 +155,10 @@ Umgebungsvariablen überschreiben Werte aus der Datei. Mit `--config /pfad/zur/d
 
 ### Kommandozeile
 
-Die Installation stellt das Skript `bundestag-mine-refactor` bereit. Zwei Befehle stehen zur Verfügung:
+Die Installation stellt das Skript `mine` bereit. Zwei Befehle stehen zur Verfügung:
 
-- `bundestag-mine-refactor import` startet den ETL-Lauf.
-- `bundestag-mine-refactor ui` startet die grafische Oberfläche.
+- `mine import` startet den ETL-Lauf.
+- `mine ui` startet die grafische Oberfläche.
 
 Häufige Optionen:
 
@@ -170,7 +170,7 @@ Häufige Optionen:
 | `--without-summaries`  | Gemini-Zusammenfassungen trotz vorhandenem Schlüssel überspringen |
 | `--ui-host HOST` / `--ui-port PORT` | Host & Port für den UI-Server (nur bei `ui`)           |
 
-Beispiel: `bundestag-mine-refactor import --since 2024-01-01T00:00:00 --limit 10`
+Beispiel: `mine import --since 2024-01-01T00:00:00 --limit 10`
 
 Während des Laufs meldet die Pipeline jeden Fortschritt über `PipelineEvent`-Objekte; Fehler führen zu einem Abbruch mit aussagekräftigem Logeintrag.
 
@@ -191,7 +191,7 @@ Die UI greift auf dieselbe Konfiguration wie das CLI zu und verwendet den gemein
 Alle Kernkomponenten können direkt aus Python-Skripten genutzt werden:
 
 ```python
-from bundestag_mine_refactor import ImportPipeline, clients, config, database
+from mine import ImportPipeline, clients, config, database
 
 app_config = config.load_config()
 dip_client = clients.DIPClient(app_config.dip.base_url, app_config.dip.api_key)
@@ -204,7 +204,7 @@ pipeline.run(limit=1)
 
 ## Datenbank & Persistenz
 
-- Standardziel ist `sqlite:///bundestag_mine.db` im Projektverzeichnis.
+- Standardziel ist `sqlite:///mine.db` im Projektverzeichnis.
 - Tabellen `protocols` und `speeches` werden automatisch angelegt und enthalten Metadaten, Redebeiträge, optionale Summaries und Zeitstempel.
 - Über `Storage.list_protocols()` lässt sich ein Überblick der zuletzt verarbeiteten Protokolle abrufen; die UI nutzt diese Funktion für die Tabelle „Persistierte Protokolle“.
 - Für produktive Deployments können beliebige SQLAlchemy-kompatible Datenbanken eingesetzt werden (z. B. PostgreSQL). Passen Sie hierzu `storage.database_url` an.
@@ -230,7 +230,7 @@ Weitere Empfehlungen:
 |-------------------------------------------------|------------------|
 | `ModuleNotFoundError` nach Installation         | Prüfen, ob die virtuelle Umgebung aktiv ist (`source .venv/bin/activate`). |
 | `403 Forbidden` beim DIP-Abruf                  | API-Key hinterlegen oder die Anfrage ohne Schlüssel auf öffentlich zugängliche Dokumente beschränken. |
-| Gemini-Zusammenfassungen werden übersprungen    | `BMR_GEMINI_API_KEY` setzen bzw. in der Konfigurationsdatei hinterlegen und nicht `--without-summaries` verwenden. |
+| Gemini-Zusammenfassungen werden übersprungen    | `MINE_GEMINI_API_KEY` setzen bzw. in der Konfigurationsdatei hinterlegen und nicht `--without-summaries` verwenden. |
 | SQLite-Datei gesperrt                           | Andere Prozesse schließen oder auf eine separate Datenbank (z. B. PostgreSQL) ausweichen. |
 | UI unter `http://127.0.0.1:8080` nicht erreichbar | Firewall/Port prüfen oder mit `--ui-host 0.0.0.0 --ui-port 8080` neu starten. |
 

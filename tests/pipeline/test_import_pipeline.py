@@ -6,9 +6,9 @@ from typing import List
 
 import pytest
 
-from bundestag_mine_refactor.core.types import ProtocolDocument, ProtocolMetadata
-from bundestag_mine_refactor.database import create_storage
-from bundestag_mine_refactor.pipeline import ImportPipeline, PipelineEvent
+from mine.core.types import ProtocolDocument, ProtocolMetadata
+from mine.database import create_storage
+from mine.pipeline import ImportPipeline, PipelineEvent
 
 
 class DummyDIPClient:

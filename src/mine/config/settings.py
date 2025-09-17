@@ -1,4 +1,4 @@
-"""Application configuration helpers for the refactored Bundestags-Mine pipeline."""
+"""Application configuration helpers for the Mine pipeline."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from typing import Any, Dict, Optional, Type, TypeVar, Union, get_args, get_orig
 
 
 _DEFAULT_CONFIG_LOCATIONS = (
-    Path("bundestag_mine_refactor.json"),
-    Path.home() / ".config" / "bundestag_mine_refactor" / "config.json",
+    Path("mine.json"),
+    Path.home() / ".config" / "mine" / "config.json",
 )
 
 
@@ -43,7 +43,7 @@ class GeminiConfig:
 class StorageConfig:
     """Configuration for the local SQLite database."""
 
-    database_url: str = "sqlite:///bundestag_mine.db"
+    database_url: str = "sqlite:///mine.db"
     echo_sql: bool = False
 
 
@@ -164,9 +164,9 @@ def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
     """Create the application configuration.
 
     The function combines default values, optional configuration files and
-    environment variables (``BMR_*``) into a single :class:`AppConfig` instance.
+    environment variables (``MINE_*``) into a single :class:`AppConfig` instance.
     Environment variable names are expected to use the format
-    ``BMR_SECTION_FIELD`` (e.g. ``BMR_DIP_API_KEY``).
+    ``MINE_SECTION_FIELD`` (e.g. ``MINE_DIP_API_KEY``).
     """
 
     base = {
@@ -186,9 +186,9 @@ def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
 
     merged = _merge_dict(base, file_data)
 
-    dip_data = _merge_dict(merged.get("dip", {}), _load_from_env("BMR_DIP_"))
-    gemini_data = _merge_dict(merged.get("gemini", {}), _load_from_env("BMR_GEMINI_"))
-    storage_data = _merge_dict(merged.get("storage", {}), _load_from_env("BMR_STORAGE_"))
+    dip_data = _merge_dict(merged.get("dip", {}), _load_from_env("MINE_DIP_"))
+    gemini_data = _merge_dict(merged.get("gemini", {}), _load_from_env("MINE_GEMINI_"))
+    storage_data = _merge_dict(merged.get("storage", {}), _load_from_env("MINE_STORAGE_"))
 
     return AppConfig(
         dip=_dataclass_from_dict(DIPConfig, dip_data),

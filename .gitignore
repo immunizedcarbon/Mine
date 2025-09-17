@@ -198,6 +198,17 @@ PublishScripts/
 
 # Microsoft Azure Build Output
 csx/
+# Python virtual environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+pip-wheel-metadata/
+*.egg-info/
+
 *.build.csdef
 
 # Microsoft Azure Emulator

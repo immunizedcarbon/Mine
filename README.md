@@ -1,105 +1,124 @@
 # Bundestag Mine Refactor
 
-Eine modernisierte, modular aufgebaute Pipeline zum Herunterladen, Parsen, Persistieren und optionalen Zusammenfassen von Plenarprotokollen des Deutschen Bundestags.
+Eine modernisierte Python-Pipeline zum Abrufen, Analysieren und Archivieren von Plenarprotokollen des Deutschen Bundestags. Die Anwendung kombiniert einen zuverlässigen ETL-Prozess, eine NiceGUI-basierte Oberfläche sowie optionale Textzusammenfassungen über Googles Gemini-API.
 
 ## Inhalt
 
-- [Überblick](#überblick)
+- [Funktionsumfang](#funktionsumfang)
 - [Projektstruktur](#projektstruktur)
 - [Systemvoraussetzungen](#systemvoraussetzungen)
 - [Installation auf Kubuntu 24.04](#installation-auf-kubuntu-2404)
 - [Konfiguration](#konfiguration)
-- [Schnellstart](#schnellstart)
-- [Grafische Oberfläche](#grafische-oberfläche)
+- [Nutzung](#nutzung)
+  - [Kommandozeile](#kommandozeile)
+  - [Grafische Oberfläche](#grafische-oberfläche)
+  - [Programmierbare Nutzung](#programmierbare-nutzung)
+- [Datenbank & Persistenz](#datenbank--persistenz)
 - [Tests & Qualitätssicherung](#tests--qualitätssicherung)
-- [Datenhaltung](#datenhaltung)
-- [Weiterführende Informationen](#weiterführende-informationen)
 - [Fehlerbehebung](#fehlerbehebung)
+- [Weiterführende Informationen](#weiterführende-informationen)
 
-## Überblick
+## Funktionsumfang
 
-Die Anwendung holt Sitzungsprotokolle über das offizielle DIP-API des Bundestags ab, zerlegt sie in einzelne Redebeiträge, speichert die Inhalte in einer relationalen Datenbank und erstellt auf Wunsch Kurzfassungen über die Gemini 2.5 Pro API. Sämtliche Komponenten sind in klar abgegrenzte Python-Module gegliedert und lassen sich unabhängig voneinander testen.
+- **Protokolle abrufen:** Der `DIPClient` kommuniziert mit der offiziellen DIP-API und lädt Metadaten sowie Volltexte der Plenarprotokolle.
+- **Texte zerlegen:** `parse_speeches` identifiziert Sprecher*innen, Parteien, Rollen und entfernt Regieanweisungen, um saubere Redebeiträge zu erzeugen.
+- **Daten speichern:** Der `Storage`-Layer legt Protokolle und Reden in einer relationalen Datenbank ab, standardmäßig SQLite.
+- **Zusammenfassungen erzeugen (optional):** Mit einem Gemini-API-Schlüssel erstellt der `GeminiSummarizer` Kurzfassungen für Reden und speichert sie im Datenbestand.
+- **Pipeline orchestrieren:** `ImportPipeline` koordiniert Abruf, Parsing, Persistenz und optionale Summaries, inklusive Abbruchmöglichkeit und Fortschrittsmeldungen.
+- **Bedienoberfläche:** Die NiceGUI-App visualisiert Status, Log und gespeicherte Protokolle und ermöglicht das Starten/Stoppen von Importläufen.
 
 ## Projektstruktur
 
 ```
 .
-├── docs/                     # Ergänzende Dokumentation (z. B. Architektur)
-├── pyproject.toml            # Projektmetadaten & Abhängigkeiten
-├── requirements.txt          # Minimale Laufzeit-Abhängigkeiten
+├── docs/
+│   └── architecture.md      # Technischer Architekturüberblick
+├── pyproject.toml           # Paket-Metadaten & optionale Dev-Abhängigkeiten
+├── requirements.txt         # Minimale Laufzeitabhängigkeiten
 ├── src/
 │   └── bundestag_mine_refactor/
-│       ├── __init__.py       # Öffentliche API des Pakets
-│       ├── __main__.py       # Einstiegspunkt für `python -m ...`
-│       ├── cli.py            # Kommandozeileninterface
-│       ├── clients/          # HTTP-Clients (v. a. DIP)
-│       ├── config/           # Konfigurationsmodelle & Laderoutinen
-│       ├── core/             # Domänenobjekte (Protokolle, Reden)
-│       ├── database/         # SQLAlchemy-Modelle & Storage-Fassade
-│       ├── parsing/          # Parser für Plenarprotokolle
-│       ├── pipeline/         # Orchestrierung des ETL-Prozesses
-│       └── summarization/    # Anbindung an Generative-AI-Dienste
-└── tests/
-    ├── clients/              # Unit-Tests für API-Clients
-    └── parsing/              # Unit-Tests für Parser
+│       ├── __main__.py      # Einstiegspunkt für `python -m`
+│       ├── cli.py           # Kommandozeileninterface
+│       ├── clients/         # HTTP-Clients (DIP)
+│       ├── config/          # Konfiguration & Settings
+│       ├── core/            # Domänenobjekte
+│       ├── database/        # SQLAlchemy-Modelle & Storage-Fassade
+│       ├── parsing/         # Text-Parser für Redebeiträge
+│       ├── pipeline/        # ETL-Orchestrierung
+│       ├── summarization/   # Gemini-Anbindung
+│       └── ui/              # NiceGUI-Control-Center
+└── tests/                   # Pytest-Suite
 ```
-
-Ein detaillierter Architekturüberblick findet sich unter [`docs/architecture.md`](docs/architecture.md).
 
 ## Systemvoraussetzungen
 
-- Kubuntu 24.04 (oder kompatibles Ubuntu 24.04 Derivat)
-- Python ≥ 3.10 (empfohlen: das systemseitige Python 3.12)
-- Git
-- Optional: Zugangsdaten für das [DIP-API](https://dip.bundestag.de) und einen Gemini 2.5 Pro API Key
+- Kubuntu 24.04 (oder ein kompatibles Ubuntu-24.04-Derivat)
+- Python ≥ 3.10 (empfohlen: das vorinstallierte Python 3.12)
+- Git und gängige Build-Werkzeuge (`build-essential`)
+- Optional: Zugangsdaten für die [DIP-API](https://dip.bundestag.de) und einen [Google Gemini API Key](https://ai.google.dev)
 
 ## Installation auf Kubuntu 24.04
 
-Die folgenden Schritte lassen sich in einem Terminal 1:1 kopieren.
+Die folgenden Schritte lassen sich direkt im Terminal ausführen. Jeder Schritt baut auf dem vorherigen auf.
 
-1. **Systempakete aktualisieren und Laufzeit-Abhängigkeiten installieren**
+1. **System vorbereiten** – Paketquellen aktualisieren und benötigte Tools installieren:
 
    ```bash
    sudo apt update
    sudo apt install -y python3.12 python3.12-venv python3-pip git build-essential
    ```
 
-2. **Repository klonen und in das Projektverzeichnis wechseln**
+   Tipp: Mit `python3 --version` lässt sich prüfen, ob Python 3.12 aktiv ist.
+
+2. **Repository klonen** – Quellcode herunterladen und ins Projektverzeichnis wechseln:
 
    ```bash
    git clone https://github.com/<ihr-account>/bundestag-mine-refactor.git
    cd bundestag-mine-refactor
    ```
 
-3. **Virtuelle Umgebung anlegen und aktivieren**
+3. **Virtuelle Umgebung einrichten** – schützt das System vor Versionskonflikten:
 
    ```bash
    python3.12 -m venv .venv
    source .venv/bin/activate
    ```
 
-4. **Pip aktualisieren und Projekt installieren**
+   Im Terminal sollte nun ein Präfix wie `(.venv)` erscheinen. Zum Deaktivieren später `deactivate` eingeben.
+
+4. **Pip aktualisieren und Projekt installieren**:
 
    ```bash
    python -m pip install --upgrade pip
    pip install -e .
    ```
 
-   Für Entwicklung inklusive Test-Werkzeugen kann alternativ installiert werden:
+   Alternativ kann die minimalistische Variante verwendet werden:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **(Optional) Entwicklungswerkzeuge installieren** – inklusive Test-Suite:
 
    ```bash
    pip install -e .[dev]
    ```
 
-5. **(Optional) Minimale Abhängigkeiten ohne Virtualenv installieren** – falls das Projekt in einem Container oder CI-System läuft, genügt `pip install .`.
+Nach Updates des Quellcodes genügt innerhalb der aktivierten virtuellen Umgebung `pip install -e .`, um die Abhängigkeiten zu aktualisieren.
 
 ## Konfiguration
 
-Die Anwendung verwendet dreistufige Konfigurationen: Standardwerte, optionale JSON-Dateien sowie Umgebungsvariablen mit dem Präfix `BMR_`.
+`load_config` kombiniert Standardwerte, optionale JSON-Dateien und Umgebungsvariablen mit dem Präfix `BMR_`. Ohne eigene Einstellungen wird eine lokale SQLite-Datenbank (`bundestag_mine.db`) verwendet.
 
-### Konfigurationsdatei
+### Konfigurationsdatei anlegen
 
-Erstellen Sie optional eine Datei `bundestag_mine_refactor.json` im Projektverzeichnis oder unter `~/.config/bundestag_mine_refactor/config.json`. Beispiel:
+Die Anwendung sucht automatisch nach folgenden Dateien (in dieser Reihenfolge):
+
+1. `./bundestag_mine_refactor.json`
+2. `~/.config/bundestag_mine_refactor/config.json`
+
+Beispielinhalt:
 
 ```json
 {
@@ -119,104 +138,105 @@ Erstellen Sie optional eine Datei `bundestag_mine_refactor.json` im Projektverze
 
 ### Umgebungsvariablen
 
-| Variable             | Bedeutung                                      |
-|----------------------|------------------------------------------------|
-| `BMR_DIP_API_KEY`    | API-Key für das DIP-Portal                      |
-| `BMR_DIP_BASE_URL`   | Alternative Basis-URL des DIP-API               |
-| `BMR_GEMINI_API_KEY` | API-Key für Gemini 2.5 Pro                      |
-| `BMR_GEMINI_ENABLE_SAFETY_SETTINGS` | `true` aktiviert die Safety-Filter (Standard: aus) |
-| `BMR_STORAGE_DATABASE_URL` | Vollständige SQLAlchemy-URL zur Datenbank |
-| `BMR_STORAGE_ECHO_SQL`     | `true`/`false` für SQL-Debug-Ausgaben      |
+| Variable                        | Bedeutung                                                        |
+|---------------------------------|------------------------------------------------------------------|
+| `BMR_DIP_API_KEY`               | API-Key für das DIP-Portal                                       |
+| `BMR_DIP_BASE_URL`              | Alternative Basis-URL des DIP-Endpunkts                          |
+| `BMR_DIP_TIMEOUT` / `BMR_DIP_MAX_RETRIES` | HTTP-Timeout (Sekunden) bzw. Retry-Anzahl                |
+| `BMR_DIP_PAGE_SIZE`             | Seitengröße für die Protokollabfrage                             |
+| `BMR_GEMINI_API_KEY`            | API-Key für Gemini-Zusammenfassungen                             |
+| `BMR_GEMINI_ENABLE_SAFETY_SETTINGS` | `true` aktiviert die Gemini-Safety-Filter                     |
+| `BMR_STORAGE_DATABASE_URL`      | Vollständige SQLAlchemy-URL (z. B. `postgresql+psycopg://…`)     |
+| `BMR_STORAGE_ECHO_SQL`          | `true`/`false` für SQL-Debug-Ausgaben                            |
 
-Umgebungsvariablen überschreiben Werte aus der Konfigurationsdatei. Bei Bedarf kann per CLI-Flag `--config` eine spezifische JSON-Datei geladen werden.
+Umgebungsvariablen überschreiben Werte aus der Datei. Mit `--config /pfad/zur/datei.json` lässt sich beim CLI-Aufruf eine spezifische Datei laden.
 
-## Schnellstart
+## Nutzung
 
-1. **Kommandozeilenwerkzeug verwenden**
+### Kommandozeile
 
-   ```bash
-   bundestag-mine-refactor import --since 2024-01-01T00:00:00 --limit 5
-   ```
+Die Installation stellt das Skript `bundestag-mine-refactor` bereit. Zwei Befehle stehen zur Verfügung:
 
-   - `--since` filtert Protokolle nach Aktualisierungsdatum (ISO-8601).
-   - `--limit` begrenzt die Anzahl der verarbeiteten Protokolle.
-   - `--without-summaries` deaktiviert Gemini-Zusammenfassungen, selbst wenn ein API-Key konfiguriert ist.
+- `bundestag-mine-refactor import` startet den ETL-Lauf.
+- `bundestag-mine-refactor ui` startet die grafische Oberfläche.
 
-2. **Modul direkt starten**
+Häufige Optionen:
 
-   ```bash
-   python -m bundestag_mine_refactor import --limit 1
-   ```
+| Option                 | Beschreibung                                                     |
+|------------------------|------------------------------------------------------------------|
+| `--config DATEI`       | Explizite Konfigurationsdatei laden                               |
+| `--since ISO-ZEIT`     | Nur Protokolle importieren, die seitdem aktualisiert wurden       |
+| `--limit N`            | Anzahl der Protokolle begrenzen                                   |
+| `--without-summaries`  | Gemini-Zusammenfassungen trotz vorhandenem Schlüssel überspringen |
+| `--ui-host HOST` / `--ui-port PORT` | Host & Port für den UI-Server (nur bei `ui`)           |
 
-3. **Programmatische Nutzung**
+Beispiel: `bundestag-mine-refactor import --since 2024-01-01T00:00:00 --limit 10`
 
-   ```python
-   from bundestag_mine_refactor import ImportPipeline, clients, config, database, summarization
+Während des Laufs meldet die Pipeline jeden Fortschritt über `PipelineEvent`-Objekte; Fehler führen zu einem Abbruch mit aussagekräftigem Logeintrag.
 
-   app_config = config.load_config()
-   dip_client = clients.DIPClient(app_config.dip.base_url, app_config.dip.api_key)
-   storage = database.create_storage(app_config.storage.database_url)
-   pipeline = ImportPipeline(dip_client=dip_client, storage=storage)
-   pipeline.run(limit=1)
-   ```
+### Grafische Oberfläche
 
-4. **Grafische Oberfläche starten**
+Der UI-Befehl startet eine NiceGUI-App (Standard: `http://127.0.0.1:8080`). Die Oberfläche bietet:
 
-   ```bash
-   bundestag-mine-refactor ui --ui-host 0.0.0.0 --ui-port 8080
-   ```
+- Start/Stopp-Schalter für Importläufe
+- Live-Monitoring von Fortschritt, Reden und erzeugten Zusammenfassungen
+- Log-Tabelle mit Zeitstempeln und Verarbeitungsphasen
+- Snapshot-Tabelle aller gespeicherten Protokolle inklusive Sitzung, Datum und Redeanzahl
+- Einblendung von Fehlern und Laufzeitdauer je Import
 
-   - Moderne Single-Page-Oberfläche auf Basis von NiceGUI.
-   - Echtzeit-Status, Logstream und abrufbare Datenbank-Snapshots.
-   - Import-Läufe lassen sich komfortabel starten, überwachen und abbrechen.
+Die UI greift auf dieselbe Konfiguration wie das CLI zu und verwendet den gemeinsamen `Storage`-Layer. Mit `--ui-host 0.0.0.0` lässt sich die Oberfläche im Netzwerk freigeben.
 
-## Grafische Oberfläche
+### Programmierbare Nutzung
 
-Die UI ist als responsive Control-Center umgesetzt. Sie bündelt alle relevanten Steuerungsmöglichkeiten in einer modernen Weboberfläche und läuft komplett in Python. Wichtige Merkmale:
+Alle Kernkomponenten können direkt aus Python-Skripten genutzt werden:
 
-- **Live-Monitoring:** Fortschritt, Anzahl gespeicherter Reden und erzeugter Zusammenfassungen werden in Echtzeit aktualisiert.
-- **Streaming-Log:** Jede Pipeline-Phase erscheint im Log inklusive Protokoll-ID und Titel.
-- **Abbruch & Wiederaufnahme:** Langlaufende Imports können per Klick abgebrochen werden, ein erneuter Start ist jederzeit möglich.
-- **Persistenz-Explorer:** Eine Tabelle zeigt die zuletzt importierten Protokolle inklusive Sitzung, Datum und Redenzahl.
-- **Konfigurationsübersicht:** API-Endpunkte, Datenbankziel und Gemini-Status sind transparent im Interface sichtbar.
+```python
+from bundestag_mine_refactor import ImportPipeline, clients, config, database
 
-Standardmäßig bindet der Server an `127.0.0.1:8080`. Über `--ui-host` und `--ui-port` lässt sich dies anpassen (z. B. `--ui-host 0.0.0.0`, um die UI im Netzwerk erreichbar zu machen). Beim Schließen des Prozesses wird der Hintergrundthread sauber beendet und der HTTP-Client freigegeben.
+app_config = config.load_config()
+dip_client = clients.DIPClient(app_config.dip.base_url, app_config.dip.api_key)
+storage = database.create_storage(app_config.storage.database_url)
+pipeline = ImportPipeline(dip_client=dip_client, storage=storage)
+pipeline.run(limit=1)
+```
+
+Über `runtime.create_pipeline` lassen sich außerdem `GeminiSummarizer` und bestehende Ressourcen kombinieren.
+
+## Datenbank & Persistenz
+
+- Standardziel ist `sqlite:///bundestag_mine.db` im Projektverzeichnis.
+- Tabellen `protocols` und `speeches` werden automatisch angelegt und enthalten Metadaten, Redebeiträge, optionale Summaries und Zeitstempel.
+- Über `Storage.list_protocols()` lässt sich ein Überblick der zuletzt verarbeiteten Protokolle abrufen; die UI nutzt diese Funktion für die Tabelle „Persistierte Protokolle“.
+- Für produktive Deployments können beliebige SQLAlchemy-kompatible Datenbanken eingesetzt werden (z. B. PostgreSQL). Passen Sie hierzu `storage.database_url` an.
 
 ## Tests & Qualitätssicherung
 
-Alle Unit-Tests laufen mit `pytest`.
+Die Test-Suite basiert auf `pytest` und deckt Clients, Parser, Pipeline, Konfiguration und Datenbank-Übersichten ab.
 
 ```bash
-source .venv/bin/activate  # falls noch nicht aktiv
+source .venv/bin/activate   # falls noch nicht aktiv
 pip install -e .[dev]
 pytest
 ```
 
 Weitere Empfehlungen:
 
-- `python -m pip list --outdated` zur Pflege der Abhängigkeiten.
-- Datenbank-Migrationen sollten über SQLAlchemy Alembic erfolgen (nicht enthalten, kann aber leicht ergänzt werden).
+- `python -m pip list --outdated` zur Pflege der Abhängigkeiten
+- Versionskontrolle der Datenbank mithilfe externer Tools wie Alembic (nicht enthalten)
 
-## Datenhaltung
+## Fehlerbehebung
 
-- Standardmäßig wird eine SQLite-Datenbank `bundestag_mine.db` im Projektverzeichnis verwendet.
-- Der Speicherlayer (`database.Storage`) abstrahiert sämtliche SQLAlchemy-Operationen und ermöglicht den Austausch der Datenbank, indem `storage.database_url` angepasst wird (z. B. `postgresql+psycopg://user:pass@host/db`).
-- Reden, für die noch keine Zusammenfassung vorhanden ist, können über `storage.pending_summaries()` ermittelt und anschließend mit `storage.update_summary()` aktualisiert werden.
+| Problem                                         | Lösungsvorschlag |
+|-------------------------------------------------|------------------|
+| `ModuleNotFoundError` nach Installation         | Prüfen, ob die virtuelle Umgebung aktiv ist (`source .venv/bin/activate`). |
+| `403 Forbidden` beim DIP-Abruf                  | API-Key hinterlegen oder die Anfrage ohne Schlüssel auf öffentlich zugängliche Dokumente beschränken. |
+| Gemini-Zusammenfassungen werden übersprungen    | `BMR_GEMINI_API_KEY` setzen bzw. in der Konfigurationsdatei hinterlegen und nicht `--without-summaries` verwenden. |
+| SQLite-Datei gesperrt                           | Andere Prozesse schließen oder auf eine separate Datenbank (z. B. PostgreSQL) ausweichen. |
+| UI unter `http://127.0.0.1:8080` nicht erreichbar | Firewall/Port prüfen oder mit `--ui-host 0.0.0.0 --ui-port 8080` neu starten. |
 
 ## Weiterführende Informationen
 
 - [Architekturüberblick](docs/architecture.md)
-- Offizielle APIs:
+- Offizielle Schnittstellen:
   - [DIP Dokumentationsportal](https://dip.bundestag.de)
-  - [Google AI Studio – Gemini 2.5 Pro](https://ai.google.dev/)
-
-## Fehlerbehebung
-
-| Problem                                  | Lösungsvorschlag |
-|------------------------------------------|------------------|
-| `ModuleNotFoundError` nach Installation  | Prüfen, ob die virtuelle Umgebung aktiviert ist (`source .venv/bin/activate`). |
-| Netzwerkfehler beim DIP-Abruf            | Retry-Anzahl (`dip.max_retries`) erhöhen oder Verbindung prüfen. |
-| Gemini-Zusammenfassungen werden übersprungen | Sicherstellen, dass `BMR_GEMINI_API_KEY` gesetzt oder in der Konfigurationsdatei hinterlegt ist und `--without-summaries` nicht gesetzt wurde. |
-| SQLite-Datei gesperrt                    | Offene Prozesse schließen oder auf eine externe Datenbank ausweichen. |
-
-Für weitergehende Fragen oder Beiträge nutzen Sie bitte Pull Requests oder Issues im Repository.
+  - [Google AI Studio – Gemini](https://ai.google.dev)

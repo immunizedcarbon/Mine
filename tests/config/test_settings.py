@@ -1,14 +1,14 @@
 import pytest
 
-from bundestag_mine_refactor.config import load_config
+from mine.config import load_config
 
 
 def test_environment_values_are_coerced(monkeypatch):
-    monkeypatch.setenv("BMR_DIP_PAGE_SIZE", "25")
-    monkeypatch.setenv("BMR_DIP_TIMEOUT", "15.5")
-    monkeypatch.setenv("BMR_DIP_MAX_RETRIES", "4")
-    monkeypatch.setenv("BMR_STORAGE_ECHO_SQL", "true")
-    monkeypatch.setenv("BMR_GEMINI_ENABLE_SAFETY_SETTINGS", "false")
+    monkeypatch.setenv("MINE_DIP_PAGE_SIZE", "25")
+    monkeypatch.setenv("MINE_DIP_TIMEOUT", "15.5")
+    monkeypatch.setenv("MINE_DIP_MAX_RETRIES", "4")
+    monkeypatch.setenv("MINE_STORAGE_ECHO_SQL", "true")
+    monkeypatch.setenv("MINE_GEMINI_ENABLE_SAFETY_SETTINGS", "false")
 
     config = load_config()
 
@@ -20,7 +20,7 @@ def test_environment_values_are_coerced(monkeypatch):
 
 
 def test_invalid_boolean_environment_value_raises(monkeypatch):
-    monkeypatch.setenv("BMR_STORAGE_ECHO_SQL", "definitely")
+    monkeypatch.setenv("MINE_STORAGE_ECHO_SQL", "definitely")
 
     with pytest.raises(ValueError):
         load_config()

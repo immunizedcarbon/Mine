@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Bundestags-Mine refactored pipeline controller")
+    parser = argparse.ArgumentParser(description="Mine pipeline controller")
     parser.add_argument("command", choices=["import", "ui"], help="Which pipeline action to execute")
     parser.add_argument("--config", type=Path, help="Path to an explicit configuration file")
     parser.add_argument("--since", dest="updated_since", help="Only fetch protocols updated since this ISO timestamp")

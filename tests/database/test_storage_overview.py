@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from bundestag_mine_refactor.core.types import ProtocolMetadata, Speech
-from bundestag_mine_refactor.database import create_storage
+from mine.core.types import ProtocolMetadata, Speech
+from mine.database import create_storage
 
 
 def test_list_protocols_returns_ordered_snapshots(tmp_path):

@@ -1,4 +1,4 @@
-"""NiceGUI powered control center for the Bundestag Mine pipeline."""
+"""NiceGUI powered control center for the Mine pipeline."""
 from __future__ import annotations
 
 import asyncio
@@ -266,7 +266,7 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
     with ui.header().classes("items-center justify-between bg-primary text-white px-6 py-3 shadow-lg"):
         with ui.row().classes("items-center gap-3"):
             ui.icon("gavel").classes("text-2xl")
-            ui.label("Bundestag Mine Control Center").classes("text-lg font-semibold")
+            ui.label("Mine Control Center").classes("text-lg font-semibold")
         ui.badge("Kubuntu 24.04 ready", color="accent").classes("text-sm")
 
     with ui.row().classes("w-full max-w-6xl mx-auto mt-4 gap-6 flex-col lg:flex-row"):
@@ -433,4 +433,4 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
 
     ui.timer(0.5, update_components)
     ui.on_startup(lambda: asyncio.create_task(refresh_protocols()))
-    ui.run(reload=False, host=host, port=port, title="Bundestag Mine Control Center")
+    ui.run(reload=False, host=host, port=port, title="Mine Control Center")

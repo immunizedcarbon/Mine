@@ -36,7 +36,7 @@ class GeminiConfig:
     model: str = "gemini-2.5-pro"
     timeout: float = 120.0
     max_retries: int = 3
-    enable_safety_settings: bool = True
+    enable_safety_settings: bool = False
 
 
 @dataclass(slots=True)

@@ -109,7 +109,7 @@ Nach Updates des Quellcodes genügt innerhalb der aktivierten virtuellen Umgebun
 
 ## Konfiguration
 
-`load_config` kombiniert Standardwerte, optionale JSON-Dateien und Umgebungsvariablen mit dem Präfix `MINE_`. Ohne eigene Einstellungen wird eine lokale SQLite-Datenbank (`mine.db`) verwendet.
+`load_config` kombiniert Standardwerte, optionale JSON-Dateien und Umgebungsvariablen mit dem Präfix `MINE_`. Ohne eigene Einstellungen wird eine lokale SQLite-Datenbank (`mine.db`) verwendet. Über die NiceGUI-Oberfläche (`mine ui`) lassen sich alle Konfigurationseinträge komfortabel bearbeiten; Änderungen werden standardmäßig in `~/.config/mine/config.json` gespeichert.
 
 ### Konfigurationsdatei anlegen
 
@@ -118,7 +118,7 @@ Die Anwendung sucht automatisch nach folgenden Dateien (in dieser Reihenfolge):
 1. `./mine.json`
 2. `~/.config/mine/config.json`
 
-Beispielinhalt:
+Der UI-Editor arbeitet direkt mit dieser JSON-Struktur. Beispielinhalt:
 
 ```json
 {
@@ -158,7 +158,7 @@ Umgebungsvariablen überschreiben Werte aus der Datei. Mit `--config /pfad/zur/d
 Die Installation stellt das Skript `mine` bereit. Zwei Befehle stehen zur Verfügung:
 
 - `mine import` startet den ETL-Lauf.
-- `mine ui` startet die grafische Oberfläche.
+- `mine ui` startet die grafische Oberfläche inklusive Konfigurationseditor.
 
 Häufige Optionen:
 
@@ -183,6 +183,7 @@ Der UI-Befehl startet eine NiceGUI-App (Standard: `http://127.0.0.1:8080`). Die 
 - Log-Tabelle mit Zeitstempeln und Verarbeitungsphasen
 - Snapshot-Tabelle aller gespeicherten Protokolle inklusive Sitzung, Datum und Redeanzahl
 - Einblendung von Fehlern und Laufzeitdauer je Import
+- Formularbasierte Pflege von DIP-, Gemini- und Datenbank-Einstellungen inklusive Persistenz in der JSON-Konfiguration
 
 Die UI greift auf dieselbe Konfiguration wie das CLI zu und verwendet den gemeinsamen `Storage`-Layer. Mit `--ui-host 0.0.0.0` lässt sich die Oberfläche im Netzwerk freigeben.
 

@@ -160,6 +160,26 @@ def _dataclass_from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
     return cls(**kwargs)
 
 
+def resolve_config_path(explicit_path: Optional[Path] = None) -> Path:
+    """Return the effective configuration file path.
+
+    If ``explicit_path`` is provided it is returned verbatim. Otherwise the
+    function checks the default locations in order. The first existing file is
+    used; if none are present the function falls back to the last default path
+    (``~/.config/mine/config.json``).
+    """
+
+    if explicit_path:
+        return explicit_path
+
+    for candidate in _DEFAULT_CONFIG_LOCATIONS:
+        if candidate.exists():
+            return candidate
+
+    # Prefer the XDG-style location for newly created configuration files.
+    return _DEFAULT_CONFIG_LOCATIONS[-1]
+
+
 def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
     """Create the application configuration.
 
@@ -197,4 +217,29 @@ def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
     )
 
 
-__all__ = ["AppConfig", "DIPConfig", "GeminiConfig", "StorageConfig", "load_config"]
+def save_config(config: AppConfig, path: Optional[Path] = None) -> Path:
+    """Persist ``config`` as JSON and return the target path."""
+
+    target = resolve_config_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "dip": asdict(config.dip),
+        "gemini": asdict(config.gemini),
+        "storage": asdict(config.storage),
+    }
+    with target.open("w", encoding="utf8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
+        fh.write("\n")
+    return target
+
+
+__all__ = [
+    "AppConfig",
+    "DIPConfig",
+    "GeminiConfig",
+    "StorageConfig",
+    "load_config",
+    "resolve_config_path",
+    "save_config",
+]

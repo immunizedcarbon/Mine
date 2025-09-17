@@ -6,12 +6,21 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Event, Lock
+from pathlib import Path
 from typing import Deque, Dict, List, Optional
 
 from nicegui import ui
 
-from ..config import AppConfig
-from ..database import ProtocolOverview, Storage
+from ..config import (
+    AppConfig,
+    DIPConfig,
+    GeminiConfig,
+    StorageConfig,
+    load_config,
+    resolve_config_path,
+    save_config,
+)
+from ..database import ProtocolOverview, Storage, create_storage
 from ..pipeline import PipelineEvent
 from ..runtime import create_pipeline
 
@@ -150,6 +159,22 @@ class PipelineRunner:
         protocols = self._storage.list_protocols(limit=limit)
         return [_protocol_to_row(p) for p in protocols]
 
+    def is_running(self) -> bool:
+        with self._lock:
+            return self._state.is_running
+
+    def update_resources(self, *, config: AppConfig, storage: Storage) -> None:
+        with self._lock:
+            if self._state.is_running:
+                raise RuntimeError("Import läuft noch")
+            self._config = config
+            self._storage = storage
+            self._state.revision += 1
+
+    def current_config(self) -> AppConfig:
+        with self._lock:
+            return self._config
+
     def _handle_event(self, event: PipelineEvent) -> None:
         timestamp = datetime.utcnow()
         label = _EVENT_LABELS.get(event.kind, event.kind.title())
@@ -248,10 +273,56 @@ async def _update_protocol_table(runner: PipelineRunner, table) -> None:
     table.rows = rows
 
 
-def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port: int = 8080) -> None:
+def run_ui(
+    config: AppConfig,
+    *,
+    storage: Storage,
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    config_path: Path | None = None,
+) -> None:
     """Start the NiceGUI based control center."""
 
-    runner = PipelineRunner(config=config, storage=storage)
+    config_file_path = resolve_config_path(config_path)
+    current_config = config
+    current_storage = storage
+    runner = PipelineRunner(config=current_config, storage=current_storage)
+
+    def _config_summary_text(conf: AppConfig) -> str:
+        return (
+            f"**DIP API:** `{conf.dip.base_url}`\n"
+            f"**Datenbank:** `{conf.storage.database_url}`\n"
+            f"**Gemini aktiv:** {'Ja' if conf.gemini.api_key else 'Nein'}"
+        )
+
+    def _optional(text: Optional[str]) -> Optional[str]:
+        value = (text or "").strip()
+        return value or None
+
+    def _require_text(value: Optional[str], label: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError(f"{label} darf nicht leer sein")
+        return text
+
+    def _parse_int(value: Optional[str], label: str) -> int:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError(f"{label} darf nicht leer sein")
+        try:
+            return int(float(text))
+        except ValueError as exc:
+            raise ValueError(f"{label} muss eine Ganzzahl sein") from exc
+
+    def _parse_float(value: Optional[str], label: str) -> float:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError(f"{label} darf nicht leer sein")
+        normalized = text.replace(",", ".")
+        try:
+            return float(normalized)
+        except ValueError as exc:
+            raise ValueError(f"{label} muss eine Zahl sein") from exc
 
     ui.colors(
         primary="#2563eb",
@@ -280,21 +351,91 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
                 since_input.tooltip("Optionaler ISO-8601 Zeitstempel zur Filterung der Protokolle")
                 limit_input = ui.number("Limit", value=None).props("type=number step=1 min=0")
                 limit_input.tooltip("Maximale Anzahl von Protokollen pro Lauf (leer = unbegrenzt)")
-                summary_switch = ui.switch("Gemini-Zusammenfassungen aktivieren", value=bool(config.gemini.api_key))
-                summary_switch.tooltip("Erzeugt automatisch Kurzfassungen, sofern ein gültiger API-Key konfiguriert ist")
+                summary_switch = ui.switch(
+                    "Gemini-Zusammenfassungen aktivieren",
+                    value=bool(current_config.gemini.api_key),
+                )
+                summary_switch.tooltip(
+                    "Erzeugt automatisch Kurzfassungen, sofern ein gültiger API-Key konfiguriert ist"
+                )
                 with ui.row().classes("gap-2 mt-3"):
                     start_button = ui.button("Import starten", color="primary")
                     stop_button = ui.button("Stopp", color="negative")
                     stop_button.disable()
-            with ui.card().classes("w-full shadow-md"):
-                ui.label("Konfiguration").classes("text-base font-semibold mb-2")
-                ui.markdown(
-                    f"""
-                    **DIP API:** `{config.dip.base_url}`  
-                    **Datenbank:** `{config.storage.database_url}`  
-                    **Gemini aktiv:** {'Ja' if config.gemini.api_key else 'Nein'}
-                    """
-                ).classes("text-sm")
+            with ui.card().classes("w-full shadow-md gap-2"):
+                ui.label("Konfiguration").classes("text-base font-semibold")
+                config_path_label = ui.label(f"Datei: {config_file_path}").classes("text-xs text-gray-500")
+                config_summary = ui.markdown(_config_summary_text(current_config)).classes("text-sm")
+                with ui.tabs().classes("w-full mt-1") as config_tabs:
+                    dip_tab = ui.tab("DIP API")
+                    gemini_tab = ui.tab("Gemini")
+                    storage_tab = ui.tab("Datenbank")
+                with ui.tab_panels(config_tabs, value=dip_tab).classes("w-full"):
+                    with ui.tab_panel(dip_tab):
+                        ui.label("Zugangsdaten für das Dokumentations- und Informationssystem.").classes(
+                            "text-xs text-gray-500 mb-2"
+                        )
+                        dip_base_input = ui.input("Basis-URL", value=current_config.dip.base_url)
+                        dip_base_input.classes("w-full")
+                        dip_api_key_input = ui.input("API-Schlüssel", value=current_config.dip.api_key or "")
+                        dip_api_key_input.props("type=password clearable")
+                        dip_api_key_input.classes("w-full")
+                        dip_timeout_input = ui.input(
+                            "Timeout (Sekunden)",
+                            value=f"{current_config.dip.timeout:g}",
+                        ).props("type=number step=0.1 min=0")
+                        dip_timeout_input.classes("w-full")
+                        dip_max_retries_input = ui.input(
+                            "Maximale Wiederholungen",
+                            value=str(current_config.dip.max_retries),
+                        ).props("type=number step=1 min=0")
+                        dip_max_retries_input.classes("w-full")
+                        dip_page_size_input = ui.input(
+                            "Seitengröße",
+                            value=str(current_config.dip.page_size),
+                        ).props("type=number step=1 min=1")
+                        dip_page_size_input.classes("w-full")
+                    with ui.tab_panel(gemini_tab):
+                        ui.label("Optionale Konfiguration für automatische Zusammenfassungen.").classes(
+                            "text-xs text-gray-500 mb-2"
+                        )
+                        gemini_api_key_input = ui.input("API-Schlüssel", value=current_config.gemini.api_key or "")
+                        gemini_api_key_input.props("type=password clearable")
+                        gemini_api_key_input.classes("w-full")
+                        gemini_model_input = ui.input("Modell", value=current_config.gemini.model)
+                        gemini_model_input.classes("w-full")
+                        gemini_base_url_input = ui.input("Basis-URL", value=current_config.gemini.base_url)
+                        gemini_base_url_input.classes("w-full")
+                        gemini_timeout_input = ui.input(
+                            "Timeout (Sekunden)",
+                            value=f"{current_config.gemini.timeout:g}",
+                        ).props("type=number step=0.1 min=0")
+                        gemini_timeout_input.classes("w-full")
+                        gemini_max_retries_input = ui.input(
+                            "Maximale Wiederholungen",
+                            value=str(current_config.gemini.max_retries),
+                        ).props("type=number step=1 min=0")
+                        gemini_max_retries_input.classes("w-full")
+                        gemini_safety_switch = ui.switch(
+                            "Safety-Einstellungen aktivieren",
+                            value=current_config.gemini.enable_safety_settings,
+                        )
+                    with ui.tab_panel(storage_tab):
+                        ui.label("Datenbank-Ziel für Protokolle und Redebeiträge.").classes(
+                            "text-xs text-gray-500 mb-2"
+                        )
+                        storage_url_input = ui.input(
+                            "SQLAlchemy URL",
+                            value=current_config.storage.database_url,
+                        )
+                        storage_url_input.classes("w-full")
+                        storage_echo_switch = ui.switch(
+                            "SQL-Debug-Ausgaben aktivieren",
+                            value=current_config.storage.echo_sql,
+                        )
+                with ui.row().classes("gap-2 mt-3"):
+                    save_button = ui.button("Speichern", color="primary", icon="save")
+                    reload_button = ui.button("Neu laden", icon="refresh")
         with ui.column().classes("w-full lg:w-2/3 gap-4"):
             with ui.card().classes("w-full shadow-md"):
                 ui.label("Laufzeit-Monitor").classes("text-base font-semibold mb-2")
@@ -307,7 +448,7 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
                     summary_value = ui.label("0").classes("text-3xl font-semibold")
                     summary_caption = ui.label("Aktualisierte Zusammenfassungen").classes("text-xs text-gray-500")
                 last_protocol_label = ui.label("Noch kein Import durchgeführt").classes("text-sm mt-2 text-gray-600")
-                duration_label = ui.label("-" ).classes("text-sm text-gray-500")
+                duration_label = ui.label("-").classes("text-sm text-gray-500")
                 error_alert = ui.label("").classes("text-sm text-negative")
                 error_alert.visible = False
             with ui.card().classes("w-full shadow-md"):
@@ -335,6 +476,25 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
         ]
         protocol_table = ui.table(columns=protocol_columns, rows=[], row_key="identifier").classes("w-full")
         protocol_table.props("wrap-cells flat")
+
+    def populate_fields(conf: AppConfig) -> None:
+        dip_base_input.set_value(conf.dip.base_url)
+        dip_api_key_input.set_value(conf.dip.api_key or "")
+        dip_timeout_input.set_value(f"{conf.dip.timeout:g}")
+        dip_max_retries_input.set_value(str(conf.dip.max_retries))
+        dip_page_size_input.set_value(str(conf.dip.page_size))
+        gemini_api_key_input.set_value(conf.gemini.api_key or "")
+        gemini_model_input.set_value(conf.gemini.model)
+        gemini_base_url_input.set_value(conf.gemini.base_url)
+        gemini_timeout_input.set_value(f"{conf.gemini.timeout:g}")
+        gemini_max_retries_input.set_value(str(conf.gemini.max_retries))
+        gemini_safety_switch.set_value(conf.gemini.enable_safety_settings)
+        storage_url_input.set_value(conf.storage.database_url)
+        storage_echo_switch.set_value(conf.storage.echo_sql)
+
+    def update_summary(conf: AppConfig) -> None:
+        config_summary.set_content(_config_summary_text(conf))
+        config_path_label.set_text(f"Datei: {config_file_path}")
 
     async def handle_start() -> None:
         since_value = (since_input.value or "").strip()
@@ -375,9 +535,144 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
         finally:
             refresh_button.enable()
 
+    async def handle_save_config() -> None:
+        nonlocal current_config, current_storage, config_file_path
+        if runner.is_running():
+            ui.notify("Bitte beenden Sie den laufenden Import, bevor die Konfiguration gespeichert wird.", color="warning")
+            return
+
+        try:
+            new_config = AppConfig(
+                dip=DIPConfig(
+                    base_url=_require_text(dip_base_input.value, "DIP Basis-URL"),
+                    api_key=_optional(dip_api_key_input.value),
+                    timeout=_parse_float(dip_timeout_input.value, "DIP Timeout"),
+                    max_retries=_parse_int(dip_max_retries_input.value, "DIP Wiederholungen"),
+                    page_size=_parse_int(dip_page_size_input.value, "DIP Seitengröße"),
+                ),
+                gemini=GeminiConfig(
+                    api_key=_optional(gemini_api_key_input.value),
+                    base_url=_require_text(gemini_base_url_input.value, "Gemini Basis-URL"),
+                    model=_require_text(gemini_model_input.value, "Gemini Modell"),
+                    timeout=_parse_float(gemini_timeout_input.value, "Gemini Timeout"),
+                    max_retries=_parse_int(gemini_max_retries_input.value, "Gemini Wiederholungen"),
+                    enable_safety_settings=bool(gemini_safety_switch.value),
+                ),
+                storage=StorageConfig(
+                    database_url=_require_text(storage_url_input.value, "Datenbank-URL"),
+                    echo_sql=bool(storage_echo_switch.value),
+                ),
+            )
+        except ValueError as exc:
+            ui.notify(str(exc), color="negative")
+            return
+
+        storage_changed = (
+            new_config.storage.database_url != current_config.storage.database_url
+            or new_config.storage.echo_sql != current_config.storage.echo_sql
+        )
+
+        new_storage = current_storage
+        old_storage: Optional[Storage] = None
+        if storage_changed:
+            try:
+                new_storage = await asyncio.to_thread(
+                    create_storage,
+                    new_config.storage.database_url,
+                    echo=new_config.storage.echo_sql,
+                )
+            except Exception as exc:  # pragma: no cover - depends on runtime environment
+                ui.notify(f"Datenbankverbindung fehlgeschlagen: {exc}", color="negative")
+                return
+            old_storage = current_storage
+
+        try:
+            saved_path = await asyncio.to_thread(save_config, new_config, config_file_path)
+        except Exception as exc:  # pragma: no cover - defensive I/O handling
+            if storage_changed and new_storage is not current_storage:
+                new_storage.dispose()
+            ui.notify(f"Konfiguration konnte nicht gespeichert werden: {exc}", color="negative")
+            return
+
+        try:
+            runner.update_resources(config=new_config, storage=new_storage)
+        except RuntimeError as exc:  # pragma: no cover - defensive
+            if storage_changed and new_storage is not current_storage:
+                new_storage.dispose()
+            ui.notify(str(exc), color="negative")
+            return
+
+        if old_storage is not None:
+            old_storage.dispose()
+
+        current_config = new_config
+        current_storage = new_storage
+        config_file_path = saved_path
+        populate_fields(new_config)
+        update_summary(new_config)
+        summary_switch.set_value(bool(new_config.gemini.api_key))
+        ui.notify(f"Konfiguration gespeichert ({saved_path})", color="positive")
+        if storage_changed:
+            asyncio.create_task(refresh_protocols())
+
+    async def handle_reload_config() -> None:
+        nonlocal current_config, current_storage
+        if runner.is_running():
+            ui.notify("Bitte beenden Sie den laufenden Import, bevor die Konfiguration neu geladen wird.", color="warning")
+            return
+        try:
+            reloaded_config = await asyncio.to_thread(load_config, config_file_path)
+        except Exception as exc:  # pragma: no cover - defensive I/O handling
+            ui.notify(f"Konfiguration konnte nicht geladen werden: {exc}", color="negative")
+            return
+
+        storage_changed = (
+            reloaded_config.storage.database_url != current_config.storage.database_url
+            or reloaded_config.storage.echo_sql != current_config.storage.echo_sql
+        )
+
+        new_storage = current_storage
+        old_storage: Optional[Storage] = None
+        if storage_changed:
+            try:
+                new_storage = await asyncio.to_thread(
+                    create_storage,
+                    reloaded_config.storage.database_url,
+                    echo=reloaded_config.storage.echo_sql,
+                )
+            except Exception as exc:  # pragma: no cover
+                ui.notify(f"Datenbankverbindung fehlgeschlagen: {exc}", color="negative")
+                return
+            old_storage = current_storage
+
+        try:
+            runner.update_resources(config=reloaded_config, storage=new_storage)
+        except RuntimeError as exc:  # pragma: no cover
+            if storage_changed and new_storage is not current_storage:
+                new_storage.dispose()
+            ui.notify(str(exc), color="negative")
+            return
+
+        if old_storage is not None:
+            old_storage.dispose()
+
+        current_config = reloaded_config
+        current_storage = new_storage
+        populate_fields(reloaded_config)
+        update_summary(reloaded_config)
+        summary_switch.set_value(bool(reloaded_config.gemini.api_key))
+        ui.notify("Konfiguration neu geladen", color="info")
+        if storage_changed:
+            asyncio.create_task(refresh_protocols())
+
+    populate_fields(current_config)
+    update_summary(current_config)
+
     start_button.on("click", handle_start)
     stop_button.on("click", handle_stop)
     refresh_button.on("click", refresh_protocols)
+    save_button.on("click", handle_save_config)
+    reload_button.on("click", handle_reload_config)
 
     last_revision = -1
     last_status = ""
@@ -415,11 +710,13 @@ def run_ui(config: AppConfig, *, storage: Storage, host: str = "127.0.0.1", port
             last_protocol_label.set_text(f"Zuletzt verarbeitet: {last_identifier} – {title}")
         else:
             last_protocol_label.set_text("Noch kein Import durchgeführt")
-        duration_label.set_text(_format_duration(
-            snapshot.get("started_at"),
-            snapshot.get("finished_at"),
-            snapshot.get("is_running"),
-        ))
+        duration_label.set_text(
+            _format_duration(
+                snapshot.get("started_at"),
+                snapshot.get("finished_at"),
+                snapshot.get("is_running"),
+            )
+        )
         error_message = snapshot.get("error")
         if error_message:
             error_alert.set_text(error_message)

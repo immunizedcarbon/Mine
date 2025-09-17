@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .config import load_config
+from .config import load_config, resolve_config_path
 from .database import create_storage
 from .runtime import create_pipeline
 
@@ -43,6 +43,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     config = load_config(args.config)
+    config_path = resolve_config_path(args.config)
 
     if args.command == "import":
         resources = create_pipeline(config, skip_summaries=args.without_summaries)
@@ -61,6 +62,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             storage=storage,
             host=args.ui_host,
             port=args.ui_port,
+            config_path=config_path,
         )
         storage.dispose()
         return 0

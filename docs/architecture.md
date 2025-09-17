@@ -45,7 +45,7 @@ Die lokale SQLite-Datenbank (oder eine alternative SQLAlchemy-Zieldatenbank) bes
 ## Konfigurationsquellen
 
 - **Defaultwerte:** in `config.settings` definiert (z. B. DIP-Basis-URL, SQLite-Datenbank).
-- **JSON-Dateien:** `mine.json` im Projekt oder `~/.config/mine/config.json` für nutzerspezifische Einstellungen.
+- **JSON-Dateien:** `mine.json` im Projekt oder `~/.config/mine/config.json` für nutzerspezifische Einstellungen. Über `save_config` können Änderungen programmatisch bzw. über die UI persistiert werden.
 - **Umgebungsvariablen:** Präfix `MINE_` und Schema `MINE_SECTION_FIELD`. Werte werden typkonvertiert (z. B. `true` → `bool`).
 - **CLI-Parameter:** `--config` erlaubt das Laden einer expliziten Konfigurationsdatei.
 
@@ -56,6 +56,7 @@ Die Quellen werden in der obigen Reihenfolge zusammengeführt; spätere Quellen 
 Die NiceGUI-App (`ui.app`) erstellt eine `PipelineRunner`-Instanz, die Importe in einem Hintergrundthread startet und den UI-Status regelmäßig aktualisiert. Kernbestandteile:
 
 - Steuerkarte mit Eingabefeldern für `--since`, `--limit` und einen Schalter für Gemini-Zusammenfassungen.
+- Formularbasierter Konfigurationseditor für DIP-, Gemini- und Datenbankparameter; Änderungen werden gespeichert und bei Bedarf wird die `Storage`-Instanz neu initialisiert.
 - Live-Monitor mit Status-Badge, Zählern (Protokolle, Reden, Summaries), zuletzt verarbeitetem Protokoll und Laufzeit.
 - Log-Tabelle auf Basis von `PipelineEvent`-Meldungen (max. 200 Einträge, zirkulärer Puffer).
 - Tabelle „Persistierte Protokolle“, gespeist von `Storage.list_protocols()` und per Button aktualisierbar.

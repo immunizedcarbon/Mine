@@ -73,7 +73,7 @@ Die folgenden Schritte lassen sich direkt im Terminal ausführen. Jeder Schritt 
 2. **Repository klonen** – Quellcode herunterladen und ins Projektverzeichnis wechseln:
 
    ```bash
-   git clone https://github.com/<ihr-account>/bundestag-mine-refactor.git
+   git clone https://github.com/immunizedcarbon/Mine.git
    cd bundestag-mine-refactor
    ```
 

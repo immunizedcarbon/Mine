@@ -1,195 +1,109 @@
-# Mine
+# Mine – Pipeline für Bundestagsprotokolle
 
-Eine modernisierte Python-Pipeline zum Abrufen, Analysieren und Archivieren von Plenarprotokollen des Deutschen Bundestags. Die Anwendung kombiniert einen zuverlässigen ETL-Prozess, eine NiceGUI-basierte Oberfläche sowie optionale Textzusammenfassungen über Googles Gemini-API.
+Mine lädt Plenarprotokolle aus dem Dokumentations- und Informationssystem des Deutschen Bundestags (DIP), zerlegt die Texte in Redebeiträge und speichert alles in einer relationalen Datenbank. Optional fasst die Anwendung Reden mit Googles Gemini-API zusammen und bietet eine NiceGUI-Oberfläche zum Steuern der Pipeline.
 
-## Inhalt
+## Funktionsüberblick
 
-- [Funktionsumfang](#funktionsumfang)
-- [Projektstruktur](#projektstruktur)
-- [Systemvoraussetzungen](#systemvoraussetzungen)
-- [Installation auf Kubuntu 24.04](#installation-auf-kubuntu-2404)
-- [Konfiguration](#konfiguration)
-- [Nutzung](#nutzung)
-  - [Kommandozeile](#kommandozeile)
-  - [Grafische Oberfläche](#grafische-oberfläche)
-  - [Programmierbare Nutzung](#programmierbare-nutzung)
-- [Datenbank & Persistenz](#datenbank--persistenz)
-- [Tests & Qualitätssicherung](#tests--qualitätssicherung)
-- [Fehlerbehebung](#fehlerbehebung)
-- [Weiterführende Informationen](#weiterführende-informationen)
+- **Robuster Import**: `DIPClient` holt Metadaten und Volltexte, setzt Cursors korrekt ein und wiederholt fehlgeschlagene HTTP-Anfragen.
+- **Parser für Reden**: `parse_speeches` entfernt Regieanweisungen, erkennt Sprecher*innen sowie Parteien und liefert strukturierte `Speech`-Objekte.
+- **Speicherung mit SQLAlchemy**: `Storage` verwaltet ein SQLite-Standard-Schema und unterstützt alternative SQLAlchemy-URLs.
+- **Optionale Zusammenfassungen**: `GeminiSummarizer` generiert Kurzfassungen, wenn ein Gemini-API-Schlüssel hinterlegt ist.
+- **NiceGUI Control Center**: Über `mine ui` lassen sich Importe starten/stoppen, Logs einsehen, Summaries überwachen und Einstellungen pflegen.
+- **CLI-Automatisierung**: `mine import` verarbeitet Protokolle skriptgesteuert, inklusive Limit- und Zeitfilter.
 
-## Funktionsumfang
+## Voraussetzungen (getestet mit Kubuntu 24.04)
 
-- **Protokolle abrufen:** Der `DIPClient` kommuniziert mit der offiziellen DIP-API und lädt Metadaten sowie Volltexte der Plenarprotokolle.
-- **Texte zerlegen:** `parse_speeches` identifiziert Sprecher*innen, Parteien, Rollen und entfernt Regieanweisungen, um saubere Redebeiträge zu erzeugen.
-- **Daten speichern:** Der `Storage`-Layer legt Protokolle und Reden in einer relationalen Datenbank ab, standardmäßig SQLite.
-- **Zusammenfassungen erzeugen (optional):** Mit einem Gemini-API-Schlüssel erstellt der `GeminiSummarizer` Kurzfassungen für Reden und speichert sie im Datenbestand.
-- **Pipeline orchestrieren:** `ImportPipeline` koordiniert Abruf, Parsing, Persistenz und optionale Summaries, inklusive Abbruchmöglichkeit und Fortschrittsmeldungen.
-- **Bedienoberfläche:** Die NiceGUI-App visualisiert Status, Log und gespeicherte Protokolle und ermöglicht das Starten/Stoppen von Importläufen.
+- Python ≥ 3.10 (Kubuntu 24.04 bringt Python 3.12 mit).
+- `python3-venv`, `git` sowie Build-Werkzeuge (`build-essential`).
+- Optional: DIP-API-Schlüssel und Google Gemini API Key.
 
-## Projektstruktur
+## Schnellstart
 
-```
-.
-├── docs/
-│   └── architecture.md      # Technischer Architekturüberblick
-├── pyproject.toml           # Paket-Metadaten & optionale Dev-Abhängigkeiten
-├── requirements.txt         # Minimale Laufzeitabhängigkeiten
-├── src/
-│   └── mine/
-│       ├── __main__.py      # Einstiegspunkt für `python -m`
-│       ├── cli.py           # Kommandozeileninterface
-│       ├── clients/         # HTTP-Clients (DIP)
-│       ├── config/          # Konfiguration & Settings
-│       ├── core/            # Domänenobjekte
-│       ├── database/        # SQLAlchemy-Modelle & Storage-Fassade
-│       ├── parsing/         # Text-Parser für Redebeiträge
-│       ├── pipeline/        # ETL-Orchestrierung
-│       ├── summarization/   # Gemini-Anbindung
-│       └── ui/              # NiceGUI-Control-Center
-└── tests/                   # Pytest-Suite
+### Komplettinstallation *und* Start (frisches System)
+
+```bash
+sudo apt update \
+  && sudo apt install -y python3.12 python3.12-venv python3-pip git build-essential \
+  && git clone https://github.com/immunizedcarbon/Mine.git \
+  && cd Mine \
+  && python3.12 -m venv .venv \
+  && source .venv/bin/activate \
+  && python -m pip install --upgrade pip \
+  && pip install -e . \
+  && mine ui
 ```
 
-## Systemvoraussetzungen
+### Nur starten (Projekt bereits geklont & installiert)
 
-- Kubuntu 24.04 (oder ein kompatibles Ubuntu-24.04-Derivat)
-- Python ≥ 3.10 (empfohlen: das vorinstallierte Python 3.12)
-- Git und gängige Build-Werkzeuge (`build-essential`)
-- Optional: Zugangsdaten für die [DIP-API](https://dip.bundestag.de) und einen [Google Gemini API Key](https://ai.google.dev)
+```bash
+cd Mine && source .venv/bin/activate && mine ui
+```
 
-## Installation auf Kubuntu 24.04
+Die NiceGUI-Oberfläche läuft anschließend unter <http://127.0.0.1:8080>. Beende sie mit `Ctrl+C`.
 
-Die folgenden Schritte lassen sich direkt im Terminal ausführen. Jeder Schritt baut auf dem vorherigen auf.
+## Manuelle Installation
 
-1. **System vorbereiten** – Paketquellen aktualisieren und benötigte Tools installieren:
-
-   ```bash
-   sudo apt update
-   sudo apt install -y python3.12 python3.12-venv python3-pip git build-essential
-   ```
-
-   Tipp: Mit `python3 --version` lässt sich prüfen, ob Python 3.12 aktiv ist.
-
-2. **Repository klonen** – Quellcode herunterladen und ins Projektverzeichnis wechseln:
-
+1. Repository klonen und wechseln:
    ```bash
    git clone https://github.com/immunizedcarbon/Mine.git
    cd Mine
    ```
-
-3. **Virtuelle Umgebung einrichten** – schützt das System vor Versionskonflikten:
-
+2. Virtuelle Umgebung einrichten:
    ```bash
-   python3.12 -m venv .venv
+   python3 -m venv .venv
    source .venv/bin/activate
    ```
-
-   Im Terminal sollte nun ein Präfix wie `(.venv)` erscheinen. Zum Deaktivieren später `deactivate` eingeben.
-
-4. **Pip aktualisieren und Projekt installieren**:
-
+3. Abhängigkeiten installieren:
    ```bash
    python -m pip install --upgrade pip
    pip install -e .
    ```
-
-   Alternativ kann die minimalistische Variante verwendet werden:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. **(Optional) Entwicklungswerkzeuge installieren** – inklusive Test-Suite:
-
+4. (Optional) Entwicklungs- und Testwerkzeuge:
    ```bash
    pip install -e .[dev]
    ```
 
-Nach Updates des Quellcodes genügt innerhalb der aktivierten virtuellen Umgebung `pip install -e .`, um die Abhängigkeiten zu aktualisieren.
-
 ## Konfiguration
 
-`load_config` kombiniert Standardwerte, optionale JSON-Dateien und Umgebungsvariablen mit dem Präfix `MINE_`. Ohne eigene Einstellungen wird eine lokale SQLite-Datenbank (`mine.db`) verwendet. Über die NiceGUI-Oberfläche (`mine ui`) lassen sich alle Konfigurationseinträge komfortabel bearbeiten; Änderungen werden standardmäßig in `~/.config/mine/config.json` gespeichert.
+`mine` verwendet ohne weitere Angaben eine SQLite-Datei `mine.db` im Projektordner. Konfigurationen werden als JSON gespeichert – standardmäßig unter `~/.config/mine/config.json`. Lade oder überschreibe Einstellungen über:
 
-### Konfigurationsdatei anlegen
+- `--config /pfad/zur/config.json` bei CLI-Aufrufen.
+- NiceGUI: Tab „Konfiguration“ → „Speichern“ legt die Datei an.
+- Umgebungsvariablen im Format `MINE_<BEREICH>_<FELD>`, z. B. `MINE_DIP_API_KEY`, `MINE_STORAGE_DATABASE_URL`.
 
-Die Anwendung sucht automatisch nach folgenden Dateien (in dieser Reihenfolge):
+Wichtige Optionen:
 
-1. `./mine.json`
-2. `~/.config/mine/config.json`
-
-Der UI-Editor arbeitet direkt mit dieser JSON-Struktur. Beispielinhalt:
-
-```json
-{
-  "dip": {
-    "api_key": "DIP-API-KEY",
-    "page_size": 50
-  },
-  "gemini": {
-    "api_key": "GEMINI-API-KEY",
-    "model": "gemini-2.5-pro"
-  },
-  "storage": {
-    "database_url": "sqlite:///mine.db"
-  }
-}
-```
-
-### Umgebungsvariablen
-
-| Variable                        | Bedeutung                                                        |
-|---------------------------------|------------------------------------------------------------------|
-| `MINE_DIP_API_KEY`               | API-Key für das DIP-Portal                                       |
-| `MINE_DIP_BASE_URL`              | Alternative Basis-URL des DIP-Endpunkts                          |
-| `MINE_DIP_TIMEOUT` / `MINE_DIP_MAX_RETRIES` | HTTP-Timeout (Sekunden) bzw. Retry-Anzahl                |
-| `MINE_DIP_PAGE_SIZE`             | Seitengröße für die Protokollabfrage                             |
-| `MINE_GEMINI_API_KEY`            | API-Key für Gemini-Zusammenfassungen                             |
-| `MINE_GEMINI_ENABLE_SAFETY_SETTINGS` | `true` aktiviert die Gemini-Safety-Filter                     |
-| `MINE_STORAGE_DATABASE_URL`      | Vollständige SQLAlchemy-URL (z. B. `postgresql+psycopg://…`)     |
-| `MINE_STORAGE_ECHO_SQL`          | `true`/`false` für SQL-Debug-Ausgaben                            |
-
-Umgebungsvariablen überschreiben Werte aus der Datei. Mit `--config /pfad/zur/datei.json` lässt sich beim CLI-Aufruf eine spezifische Datei laden.
+| Bereich | Schlüssel | Bedeutung |
+| --- | --- | --- |
+| `dip.base_url` | Basis-URL der DIP-API (Default: `https://search.dip.bundestag.de/api/v1`). |
+| `dip.api_key` | Optionaler API-Schlüssel für höhere Abruflimits. |
+| `gemini.api_key` | Aktiviert Zusammenfassungen; ohne Schlüssel werden Summaries übersprungen. |
+| `storage.database_url` | SQLAlchemy-Verbindungszeichenkette, z. B. `sqlite:///mine.db` oder `postgresql+psycopg://…`. |
 
 ## Nutzung
 
-### Kommandozeile
+### CLI
 
-Die Installation stellt das Skript `mine` bereit. Zwei Befehle stehen zur Verfügung:
+Nach Aktivieren der virtuellen Umgebung steht das Skript `mine` bereit.
 
-- `mine import` startet den ETL-Lauf.
-- `mine ui` startet die grafische Oberfläche inklusive Konfigurationseditor.
+- **Import starten**:
+  ```bash
+  mine import --since 2024-01-01T00:00:00 --limit 10
+  ```
+  Wichtige Optionen: `--config`, `--since`, `--limit`, `--without-summaries`.
+- **UI starten**:
+  ```bash
+  mine ui --ui-host 0.0.0.0 --ui-port 8080
+  ```
 
-Häufige Optionen:
+### NiceGUI-Oberfläche
 
-| Option                 | Beschreibung                                                     |
-|------------------------|------------------------------------------------------------------|
-| `--config DATEI`       | Explizite Konfigurationsdatei laden                               |
-| `--since ISO-ZEIT`     | Nur Protokolle importieren, die seitdem aktualisiert wurden       |
-| `--limit N`            | Anzahl der Protokolle begrenzen                                   |
-| `--without-summaries`  | Gemini-Zusammenfassungen trotz vorhandenem Schlüssel überspringen |
-| `--ui-host HOST` / `--ui-port PORT` | Host & Port für den UI-Server (nur bei `ui`)           |
+- Start/Stopp der Pipeline.
+- Live-Log, letzte Protokolle, Laufzeitstatistiken.
+- Formular zum Bearbeiten der DIP-, Gemini- und Datenbank-Einstellungen.
+- Speichert Konfigurationsänderungen auf Wunsch in der JSON-Datei.
 
-Beispiel: `mine import --since 2024-01-01T00:00:00 --limit 10`
-
-Während des Laufs meldet die Pipeline jeden Fortschritt über `PipelineEvent`-Objekte; Fehler führen zu einem Abbruch mit aussagekräftigem Logeintrag.
-
-### Grafische Oberfläche
-
-Der UI-Befehl startet eine NiceGUI-App (Standard: `http://127.0.0.1:8080`). Die Oberfläche bietet:
-
-- Start/Stopp-Schalter für Importläufe
-- Live-Monitoring von Fortschritt, Reden und erzeugten Zusammenfassungen
-- Log-Tabelle mit Zeitstempeln und Verarbeitungsphasen
-- Snapshot-Tabelle aller gespeicherten Protokolle inklusive Sitzung, Datum und Redeanzahl
-- Einblendung von Fehlern und Laufzeitdauer je Import
-- Formularbasierte Pflege von DIP-, Gemini- und Datenbank-Einstellungen inklusive Persistenz in der JSON-Konfiguration
-
-Die UI greift auf dieselbe Konfiguration wie das CLI zu und verwendet den gemeinsamen `Storage`-Layer. Mit `--ui-host 0.0.0.0` lässt sich die Oberfläche im Netzwerk freigeben.
-
-### Programmierbare Nutzung
-
-Alle Kernkomponenten können direkt aus Python-Skripten genutzt werden:
+### Programmatisch
 
 ```python
 from mine import ImportPipeline, clients, config, database
@@ -201,43 +115,28 @@ pipeline = ImportPipeline(dip_client=dip_client, storage=storage)
 pipeline.run(limit=1)
 ```
 
-Über `runtime.create_pipeline` lassen sich außerdem `GeminiSummarizer` und bestehende Ressourcen kombinieren.
+## Datenhaltung
 
-## Datenbank & Persistenz
-
-- Standardziel ist `sqlite:///mine.db` im Projektverzeichnis.
-- Tabellen `protocols` und `speeches` werden automatisch angelegt und enthalten Metadaten, Redebeiträge, optionale Summaries und Zeitstempel.
-- Über `Storage.list_protocols()` lässt sich ein Überblick der zuletzt verarbeiteten Protokolle abrufen; die UI nutzt diese Funktion für die Tabelle „Persistierte Protokolle“.
-- Für produktive Deployments können beliebige SQLAlchemy-kompatible Datenbanken eingesetzt werden (z. B. PostgreSQL). Passen Sie hierzu `storage.database_url` an.
+- Standardmäßig wird `sqlite:///mine.db` genutzt; Tabellen werden automatisch erzeugt.
+- `Storage.list_protocols()` liefert eine Übersicht der letzten Importe und wird in der UI angezeigt.
+- Für Produktivbetrieb lassen sich beliebige SQLAlchemy-kompatible Datenbanken verwenden.
 
 ## Tests & Qualitätssicherung
 
-Die Test-Suite basiert auf `pytest` und deckt Clients, Parser, Pipeline, Konfiguration und Datenbank-Übersichten ab.
+Die Test-Suite stellt sicher, dass Parser, Pipeline, Konfiguration und Datenbank-Layer funktionieren. Nach Aktivieren der virtuellen Umgebung:
 
 ```bash
-source .venv/bin/activate   # falls noch nicht aktiv
 pip install -e .[dev]
 pytest
 ```
 
-Weitere Empfehlungen:
-
-- `python -m pip list --outdated` zur Pflege der Abhängigkeiten
-- Versionskontrolle der Datenbank mithilfe externer Tools wie Alembic (nicht enthalten)
-
 ## Fehlerbehebung
 
-| Problem                                         | Lösungsvorschlag |
-|-------------------------------------------------|------------------|
-| `ModuleNotFoundError` nach Installation         | Prüfen, ob die virtuelle Umgebung aktiv ist (`source .venv/bin/activate`). |
-| `403 Forbidden` beim DIP-Abruf                  | API-Key hinterlegen oder die Anfrage ohne Schlüssel auf öffentlich zugängliche Dokumente beschränken. |
-| Gemini-Zusammenfassungen werden übersprungen    | `MINE_GEMINI_API_KEY` setzen bzw. in der Konfigurationsdatei hinterlegen und nicht `--without-summaries` verwenden. |
-| SQLite-Datei gesperrt                           | Andere Prozesse schließen oder auf eine separate Datenbank (z. B. PostgreSQL) ausweichen. |
-| UI unter `http://127.0.0.1:8080` nicht erreichbar | Firewall/Port prüfen oder mit `--ui-host 0.0.0.0 --ui-port 8080` neu starten. |
+| Problem | Lösung |
+| --- | --- |
+| `ModuleNotFoundError` nach Start | Prüfen, ob `.venv` aktiviert ist (`source .venv/bin/activate`). |
+| HTTP-Status 401/403 bei DIP | Gültigen API-Schlüssel in der Konfiguration oder per `MINE_DIP_API_KEY` hinterlegen. |
+| Keine Summaries trotz Schlüssel | Prüfen, ob `mine import` ohne `--without-summaries` läuft und `gemini.api_key` gesetzt ist. |
+| UI nicht erreichbar | Port prüfen oder mit `mine ui --ui-host 0.0.0.0 --ui-port 8080` starten. |
 
-## Weiterführende Informationen
-
-- [Architekturüberblick](docs/architecture.md)
-- Offizielle Schnittstellen:
-  - [DIP Dokumentationsportal](https://dip.bundestag.de)
-  - [Google AI Studio – Gemini](https://ai.google.dev)
+Weiterführende Details zur Architektur findest du in [`docs/architecture.md`](docs/architecture.md).

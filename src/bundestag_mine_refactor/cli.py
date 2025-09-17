@@ -47,6 +47,7 @@ def _create_pipeline(config: AppConfig, *, skip_summaries: bool) -> ImportPipeli
             model=config.gemini.model,
             timeout=config.gemini.timeout,
             max_retries=config.gemini.max_retries,
+            enable_safety_settings=config.gemini.enable_safety_settings,
         )
     elif not skip_summaries:
         LOGGER.warning("Gemini API key missing - summaries will be skipped")

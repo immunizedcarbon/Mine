@@ -9,7 +9,7 @@ from threading import Event, Lock
 from pathlib import Path
 from typing import Deque, Dict, List, Optional
 
-from nicegui import ui
+from nicegui import app, ui
 
 from ..config import (
     AppConfig,
@@ -729,5 +729,5 @@ def run_ui(
         last_status = status
 
     ui.timer(0.5, update_components)
-    ui.on_startup(lambda: asyncio.create_task(refresh_protocols()))
+    app.on_startup(lambda: asyncio.create_task(refresh_protocols()))
     ui.run(reload=False, host=host, port=port, title="Mine Control Center")

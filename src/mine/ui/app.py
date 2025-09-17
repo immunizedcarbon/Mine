@@ -349,7 +349,7 @@ def run_ui(
                     placeholder="2024-01-01T00:00:00",
                 ).props("clearable")
                 since_input.tooltip("Optionaler ISO-8601 Zeitstempel zur Filterung der Protokolle")
-                limit_input = ui.number("Limit", value=None).props("type=number step=1 min=0")
+                limit_input = ui.input("Limit", value="").props("type=number step=1 min=0")
                 limit_input.tooltip("Maximale Anzahl von Protokollen pro Lauf (leer = unbegrenzt)")
                 summary_switch = ui.switch(
                     "Gemini-Zusammenfassungen aktivieren",

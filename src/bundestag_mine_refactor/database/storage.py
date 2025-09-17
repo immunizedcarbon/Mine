@@ -3,14 +3,29 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Iterable, Iterator, Sequence
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, func
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..core.types import ProtocolMetadata, Speech
 from .models import Base, Protocol, SpeechModel
+
+
+@dataclass(slots=True)
+class ProtocolOverview:
+    """Lightweight representation of a persisted protocol."""
+
+    identifier: str
+    legislative_period: int | None
+    session_number: int | None
+    date: date | None
+    title: str | None
+    speech_count: int
+    updated_at: datetime | None
 
 
 class Storage:
@@ -91,6 +106,55 @@ class Storage:
             speech.sentiment = sentiment
             speech.topics = topics
 
+    def dispose(self) -> None:
+        """Dispose the underlying SQLAlchemy engine."""
+
+        self._engine.dispose()
+
+    def list_protocols(self, limit: int = 25) -> list[ProtocolOverview]:
+        """Return a chronological snapshot of the latest stored protocols."""
+
+        with self.session() as session:
+            stmt = (
+                select(
+                    Protocol.id,
+                    Protocol.legislative_period,
+                    Protocol.session_number,
+                    Protocol.date,
+                    Protocol.title,
+                    Protocol.updated_at,
+                    func.count(SpeechModel.id).label("speech_count"),
+                )
+                .outerjoin(SpeechModel, SpeechModel.protocol_id == Protocol.id)
+                .group_by(
+                    Protocol.id,
+                    Protocol.legislative_period,
+                    Protocol.session_number,
+                    Protocol.date,
+                    Protocol.title,
+                    Protocol.updated_at,
+                )
+                .order_by(
+                    Protocol.date.desc().nullslast(),
+                    Protocol.updated_at.desc().nullslast(),
+                    Protocol.id.desc(),
+                )
+                .limit(limit)
+            )
+            rows = session.execute(stmt).all()
+            return [
+                ProtocolOverview(
+                    identifier=row.id,
+                    legislative_period=row.legislative_period,
+                    session_number=row.session_number,
+                    date=row.date,
+                    title=row.title,
+                    speech_count=row.speech_count or 0,
+                    updated_at=row.updated_at,
+                )
+                for row in rows
+            ]
+
 
 def create_storage(database_url: str, *, echo: bool = False) -> Storage:
     engine = create_engine(database_url, echo=echo, future=True)
@@ -99,4 +163,4 @@ def create_storage(database_url: str, *, echo: bool = False) -> Storage:
     return storage
 
 
-__all__ = ["Storage", "create_storage"]
+__all__ = ["ProtocolOverview", "Storage", "create_storage"]

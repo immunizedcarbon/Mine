@@ -6,11 +6,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .clients import DIPClient
-from .config import AppConfig, load_config
+from .config import load_config
 from .database import create_storage
-from .pipeline import ImportPipeline
-from .summarization import GeminiSummarizer
+from .runtime import create_pipeline
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 LOGGER = logging.getLogger(__name__)
@@ -18,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Bundestags-Mine refactored pipeline controller")
-    parser.add_argument("command", choices=["import"], help="Which pipeline action to execute")
+    parser.add_argument("command", choices=["import", "ui"], help="Which pipeline action to execute")
     parser.add_argument("--config", type=Path, help="Path to an explicit configuration file")
     parser.add_argument("--since", dest="updated_since", help="Only fetch protocols updated since this ISO timestamp")
     parser.add_argument("--limit", type=int, help="Maximum number of protocols to import")
@@ -27,42 +25,44 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip Gemini summarisation even if an API key is configured",
     )
-    return parser
-
-
-def _create_pipeline(config: AppConfig, *, skip_summaries: bool) -> ImportPipeline:
-    dip_client = DIPClient(
-        config.dip.base_url,
-        config.dip.api_key,
-        timeout=config.dip.timeout,
-        max_retries=config.dip.max_retries,
-        page_size=config.dip.page_size,
+    parser.add_argument(
+        "--ui-host",
+        default="127.0.0.1",
+        help="Host interface for the UI server (only used with the 'ui' command)",
     )
-    storage = create_storage(config.storage.database_url, echo=config.storage.echo_sql)
-    summarizer = None
-    if not skip_summaries and config.gemini.api_key:
-        summarizer = GeminiSummarizer(
-            api_key=config.gemini.api_key,
-            base_url=config.gemini.base_url,
-            model=config.gemini.model,
-            timeout=config.gemini.timeout,
-            max_retries=config.gemini.max_retries,
-            enable_safety_settings=config.gemini.enable_safety_settings,
-        )
-    elif not skip_summaries:
-        LOGGER.warning("Gemini API key missing - summaries will be skipped")
-    return ImportPipeline(dip_client=dip_client, storage=storage, summarizer=summarizer)
+    parser.add_argument(
+        "--ui-port",
+        type=int,
+        default=8080,
+        help="Port for the UI server (only used with the 'ui' command)",
+    )
+    return parser
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     config = load_config(args.config)
-    pipeline = _create_pipeline(config, skip_summaries=args.without_summaries)
 
     if args.command == "import":
-        processed = pipeline.run(updated_since=args.updated_since, limit=args.limit)
-        LOGGER.info("Imported %s protocols", processed)
+        resources = create_pipeline(config, skip_summaries=args.without_summaries)
+        try:
+            processed = resources.pipeline.run(updated_since=args.updated_since, limit=args.limit)
+            LOGGER.info("Imported %s protocols", processed)
+            return 0
+        finally:
+            resources.close()
+    if args.command == "ui":
+        from .ui.app import run_ui
+
+        storage = create_storage(config.storage.database_url, echo=config.storage.echo_sql)
+        run_ui(
+            config,
+            storage=storage,
+            host=args.ui_host,
+            port=args.ui_port,
+        )
+        storage.dispose()
         return 0
     parser.error(f"Unknown command {args.command}")
     return 2

@@ -1,4 +1,5 @@
 """Typed domain objects for the refactored pipeline."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

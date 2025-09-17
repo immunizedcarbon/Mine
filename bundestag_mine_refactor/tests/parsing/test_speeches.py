@@ -1,4 +1,4 @@
-from bundestag_mine_refactor.parser import parse_speeches
+from bundestag_mine_refactor.parsing import parse_speeches
 
 
 def test_parse_speeches_extracts_multiple_segments():

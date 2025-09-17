@@ -5,7 +5,7 @@ from typing import List, Tuple
 import logging
 import re
 
-from .types import Speech
+from ..core.types import Speech
 
 LOGGER = logging.getLogger(__name__)
 

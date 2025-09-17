@@ -7,7 +7,7 @@ import logging
 
 import httpx
 
-from .types import ProtocolDocument, ProtocolMetadata
+from ..core.types import ProtocolDocument, ProtocolMetadata
 
 LOGGER = logging.getLogger(__name__)
 

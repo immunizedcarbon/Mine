@@ -123,6 +123,7 @@ Erstellen Sie optional eine Datei `bundestag_mine_refactor.json` im Projektverze
 | `BMR_DIP_API_KEY`    | API-Key für das DIP-Portal                      |
 | `BMR_DIP_BASE_URL`   | Alternative Basis-URL des DIP-API               |
 | `BMR_GEMINI_API_KEY` | API-Key für Gemini 2.5 Pro                      |
+| `BMR_GEMINI_ENABLE_SAFETY_SETTINGS` | `true` aktiviert die Safety-Filter (Standard: aus) |
 | `BMR_STORAGE_DATABASE_URL` | Vollständige SQLAlchemy-URL zur Datenbank |
 | `BMR_STORAGE_ECHO_SQL`     | `true`/`false` für SQL-Debug-Ausgaben      |
 

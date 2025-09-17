@@ -1,4 +1,5 @@
 """Persistence helpers built on SQLAlchemy."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -8,8 +9,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..core.types import ProtocolMetadata, Speech
 from .models import Base, Protocol, SpeechModel
-from .types import ProtocolMetadata, Speech
 
 
 class Storage:

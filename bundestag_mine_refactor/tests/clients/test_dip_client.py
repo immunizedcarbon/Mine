@@ -1,9 +1,8 @@
 from datetime import date
-from datetime import date
 
 import pytest
 
-from bundestag_mine_refactor.dip_client import DIPClient
+from bundestag_mine_refactor.clients import DIPClient
 
 
 class DummyClient(DIPClient):

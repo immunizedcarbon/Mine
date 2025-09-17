@@ -6,11 +6,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from .clients import DIPClient
 from .config import AppConfig, load_config
-from .dip_client import DIPClient
+from .database import create_storage
 from .pipeline import ImportPipeline
-from .storage import create_storage
-from .summarizer import GeminiSummarizer
+from .summarization import GeminiSummarizer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 LOGGER = logging.getLogger(__name__)

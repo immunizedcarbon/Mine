@@ -1,13 +1,13 @@
 """High level orchestration of the refactored Bundestags-Mine pipeline."""
 from __future__ import annotations
 
-from typing import Optional
 import logging
+from typing import Optional
 
-from .dip_client import DIPClient
-from .parser import parse_speeches
-from .storage import Storage
-from .summarizer import GeminiSummarizer
+from ..clients import DIPClient
+from ..database import Storage
+from ..parsing import parse_speeches
+from ..summarization import GeminiSummarizer
 
 LOGGER = logging.getLogger(__name__)
 

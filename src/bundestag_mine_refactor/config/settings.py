@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Any, Dict, Optional
+import types
+from typing import Any, Dict, Optional, Type, TypeVar, Union, get_args, get_origin, get_type_hints
 
 
 _DEFAULT_CONFIG_LOCATIONS = (
@@ -79,6 +80,86 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
         return json.load(fh)
 
 
+T = TypeVar("T")
+
+
+def _coerce_value(value: Any, annotation: Any) -> Any:
+    """Best-effort conversion of ``value`` to match ``annotation``."""
+
+    if value is None:
+        return None
+
+    origin = get_origin(annotation)
+    if origin in (Union, types.UnionType):
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]  # noqa: E721 - allow Optional
+        if not args:
+            return None
+        last_error: Exception | None = None
+        for candidate in args:
+            try:
+                return _coerce_value(value, candidate)
+            except (TypeError, ValueError) as exc:
+                last_error = exc
+        raise ValueError(f"Cannot convert {value!r} to {annotation}") from last_error
+
+    target_type = origin or annotation
+
+    if target_type in {Any, object}:
+        return value
+
+    if target_type is bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "y", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "n", "off"}:
+                return False
+        if isinstance(value, (int, float)):
+            return bool(value)
+        raise ValueError(f"Cannot convert {value!r} to bool")
+
+    if target_type is int:
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        if isinstance(value, (float, str)):
+            return int(float(value))
+        raise ValueError(f"Cannot convert {value!r} to int")
+
+    if target_type is float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            return float(value)
+        raise ValueError(f"Cannot convert {value!r} to float")
+
+    if target_type is str:
+        if isinstance(value, str):
+            return value
+        return str(value)
+
+    return value
+
+
+def _dataclass_from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+    """Create dataclass ``cls`` while coercing ``data`` to the proper types."""
+
+    kwargs: Dict[str, Any] = {}
+    type_hints = get_type_hints(cls)
+    for field in fields(cls):
+        if field.name not in data:
+            continue
+        try:
+            annotation = type_hints.get(field.name, field.type)
+            kwargs[field.name] = _coerce_value(data[field.name], annotation)
+        except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+            raise ValueError(
+                f"Invalid value for {cls.__name__}.{field.name}: {data[field.name]!r}"
+            ) from exc
+    return cls(**kwargs)
+
+
 def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
     """Create the application configuration.
 
@@ -89,9 +170,9 @@ def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
     """
 
     base = {
-        "dip": DIPConfig().__dict__,
-        "gemini": GeminiConfig().__dict__,
-        "storage": StorageConfig().__dict__,
+        "dip": asdict(DIPConfig()),
+        "gemini": asdict(GeminiConfig()),
+        "storage": asdict(StorageConfig()),
     }
 
     file_data: Dict[str, Any] = {}
@@ -110,9 +191,9 @@ def load_config(explicit_path: Optional[Path] = None) -> AppConfig:
     storage_data = _merge_dict(merged.get("storage", {}), _load_from_env("BMR_STORAGE_"))
 
     return AppConfig(
-        dip=DIPConfig(**dip_data),
-        gemini=GeminiConfig(**gemini_data),
-        storage=StorageConfig(**storage_data),
+        dip=_dataclass_from_dict(DIPConfig, dip_data),
+        gemini=_dataclass_from_dict(GeminiConfig, gemini_data),
+        storage=_dataclass_from_dict(StorageConfig, storage_data),
     )
 
 

@@ -74,7 +74,7 @@ Die folgenden Schritte lassen sich direkt im Terminal ausführen. Jeder Schritt 
 
    ```bash
    git clone https://github.com/immunizedcarbon/Mine.git
-   cd bundestag-mine-refactor
+   cd Mine
    ```
 
 3. **Virtuelle Umgebung einrichten** – schützt das System vor Versionskonflikten:

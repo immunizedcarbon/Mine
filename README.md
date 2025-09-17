@@ -10,6 +10,7 @@ Eine modernisierte, modular aufgebaute Pipeline zum Herunterladen, Parsen, Persi
 - [Installation auf Kubuntu 24.04](#installation-auf-kubuntu-2404)
 - [Konfiguration](#konfiguration)
 - [Schnellstart](#schnellstart)
+- [Grafische Oberfläche](#grafische-oberfläche)
 - [Tests & Qualitätssicherung](#tests--qualitätssicherung)
 - [Datenhaltung](#datenhaltung)
 - [Weiterführende Informationen](#weiterführende-informationen)
@@ -158,6 +159,28 @@ Umgebungsvariablen überschreiben Werte aus der Konfigurationsdatei. Bei Bedarf 
    pipeline = ImportPipeline(dip_client=dip_client, storage=storage)
    pipeline.run(limit=1)
    ```
+
+4. **Grafische Oberfläche starten**
+
+   ```bash
+   bundestag-mine-refactor ui --ui-host 0.0.0.0 --ui-port 8080
+   ```
+
+   - Moderne Single-Page-Oberfläche auf Basis von NiceGUI.
+   - Echtzeit-Status, Logstream und abrufbare Datenbank-Snapshots.
+   - Import-Läufe lassen sich komfortabel starten, überwachen und abbrechen.
+
+## Grafische Oberfläche
+
+Die UI ist als responsive Control-Center umgesetzt. Sie bündelt alle relevanten Steuerungsmöglichkeiten in einer modernen Weboberfläche und läuft komplett in Python. Wichtige Merkmale:
+
+- **Live-Monitoring:** Fortschritt, Anzahl gespeicherter Reden und erzeugter Zusammenfassungen werden in Echtzeit aktualisiert.
+- **Streaming-Log:** Jede Pipeline-Phase erscheint im Log inklusive Protokoll-ID und Titel.
+- **Abbruch & Wiederaufnahme:** Langlaufende Imports können per Klick abgebrochen werden, ein erneuter Start ist jederzeit möglich.
+- **Persistenz-Explorer:** Eine Tabelle zeigt die zuletzt importierten Protokolle inklusive Sitzung, Datum und Redenzahl.
+- **Konfigurationsübersicht:** API-Endpunkte, Datenbankziel und Gemini-Status sind transparent im Interface sichtbar.
+
+Standardmäßig bindet der Server an `127.0.0.1:8080`. Über `--ui-host` und `--ui-port` lässt sich dies anpassen (z. B. `--ui-host 0.0.0.0`, um die UI im Netzwerk erreichbar zu machen). Beim Schließen des Prozesses wird der Hintergrundthread sauber beendet und der HTTP-Client freigegeben.
 
 ## Tests & Qualitätssicherung
 

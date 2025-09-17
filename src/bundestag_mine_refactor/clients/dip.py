@@ -68,6 +68,17 @@ class DIPClient:
             raise DIPClientError(f"Protocol {identifier} does not contain text data")
         return ProtocolDocument(metadata=metadata, full_text=full_text)
 
+    def close(self) -> None:
+        """Close the underlying HTTP client."""
+
+        self._client.close()
+
+    def __enter__(self) -> "DIPClient":  # pragma: no cover - trivial
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - trivial
+        self.close()
+
     # --- helpers --------------------------------------------------------
     def _headers(self) -> Dict[str, str]:
         headers = {"Accept": "application/json"}

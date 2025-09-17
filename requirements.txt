@@ -1,3 +1,4 @@
 httpx>=0.27
 SQLAlchemy>=2.0
 google-genai>=1.38
+nicegui>=1.4.17

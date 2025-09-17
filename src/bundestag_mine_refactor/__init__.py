@@ -6,7 +6,9 @@ from .config import AppConfig, DIPConfig, GeminiConfig, StorageConfig, load_conf
 from .core import ProtocolDocument, ProtocolMetadata, Speech
 from .database import Base, Protocol, SpeechModel, Storage, create_storage
 from .parsing import parse_speeches
-from .pipeline import ImportPipeline
+from .pipeline import ImportPipeline, PipelineEvent
+from .runtime import PipelineResources, create_pipeline
+from .ui import run_ui
 from .summarization import GeminiSummarizer
 
 __all__ = [
@@ -18,6 +20,8 @@ __all__ = [
     "GeminiConfig",
     "GeminiSummarizer",
     "ImportPipeline",
+    "PipelineEvent",
+    "PipelineResources",
     "Protocol",
     "ProtocolDocument",
     "ProtocolMetadata",
@@ -26,6 +30,8 @@ __all__ = [
     "Storage",
     "StorageConfig",
     "create_storage",
+    "create_pipeline",
     "load_config",
     "parse_speeches",
+    "run_ui",
 ]

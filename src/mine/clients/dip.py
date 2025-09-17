@@ -89,6 +89,7 @@ class DIPClient:
     def _request(self, method: str, path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         url = f"{self._base_url}{path}"
         last_exc: Optional[Exception] = None
+        error_message: Optional[str] = None
         for attempt in range(1, self._max_retries + 1):
             try:
                 response = self._client.request(method, url, headers=self._headers(), params=params)
@@ -96,10 +97,31 @@ class DIPClient:
                 return response.json()
             except httpx.HTTPStatusError as exc:  # pragma: no cover - network errors are rare in tests
                 last_exc = exc
-                LOGGER.warning("DIP API returned status %s for %s %s", exc.response.status_code, method, url)
+                status = exc.response.status_code
+                LOGGER.warning("DIP API returned status %s for %s %s", status, method, url)
+                if status == 401:
+                    error_message = (
+                        "Die DIP API hat den Zugriff mit Status 401 verweigert. "
+                        "Bitte hinterlegen Sie einen gültigen API-Schlüssel in der Konfiguration."
+                    )
+                    break
+                if status == 403:
+                    error_message = (
+                        "Die DIP API hat den Zugriff mit Status 403 verweigert. "
+                        "Bitte überprüfen Sie den hinterlegten API-Schlüssel und Ihre Berechtigungen."
+                    )
+                    break
+                if status == 429:
+                    error_message = (
+                        "Die DIP API hat das Abruflimit erreicht (Status 429). Bitte warten Sie kurz und versuchen Sie es dann erneut."
+                    )
+                else:
+                    error_message = f"Die DIP API hat die Anfrage mit Status {status} abgelehnt."
             except httpx.HTTPError as exc:  # pragma: no cover - network errors are rare in tests
                 last_exc = exc
                 LOGGER.warning("HTTP error while requesting %s %s: %s", method, url, exc)
+        if error_message:
+            raise DIPClientError(error_message) from last_exc
         raise DIPClientError(f"Failed to request {url}") from last_exc
 
     @staticmethod
